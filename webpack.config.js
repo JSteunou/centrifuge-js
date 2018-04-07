@@ -14,6 +14,7 @@ if (env === 'build') {
 const config = {
   entry: {
     'centrifuge': __dirname + '/src/index.js',
+    'centrifuge.json': __dirname + '/src/index_json.js',
     'centrifuge.protobuf': __dirname + '/src/index_protobuf.js'
   },
   devtool: 'source-map',

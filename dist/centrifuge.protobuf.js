@@ -70,7 +70,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 34);
+/******/ 	return __webpack_require__(__webpack_require__.s = 52);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -91,9 +91,9 @@ var roots = __webpack_require__(22);
 var Type, // cyclic
     Enum;
 
-util.codegen = __webpack_require__(48);
-util.fetch   = __webpack_require__(49);
-util.path    = __webpack_require__(50);
+util.codegen = __webpack_require__(46);
+util.fetch   = __webpack_require__(47);
+util.path    = __webpack_require__(48);
 
 /**
  * Node's fs module if available.
@@ -270,7 +270,7 @@ module.exports = Enum;
 var ReflectionObject = __webpack_require__(4);
 ((Enum.prototype = Object.create(ReflectionObject.prototype)).constructor = Enum).className = "Enum";
 
-var Namespace = __webpack_require__(9),
+var Namespace = __webpack_require__(6),
     util = __webpack_require__(0);
 
 /**
@@ -458,25 +458,25 @@ var util = exports;
 util.asPromise = __webpack_require__(19);
 
 // converts to / from base64 encoded strings
-util.base64 = __webpack_require__(39);
+util.base64 = __webpack_require__(37);
 
 // base class of rpc.Service
-util.EventEmitter = __webpack_require__(40);
+util.EventEmitter = __webpack_require__(38);
 
 // float handling accross browsers
-util.float = __webpack_require__(41);
+util.float = __webpack_require__(39);
 
 // requires modules optionally and hides the call from bundlers
 util.inquire = __webpack_require__(20);
 
 // converts to / from utf8 encoded strings
-util.utf8 = __webpack_require__(42);
+util.utf8 = __webpack_require__(40);
 
 // provides a node-like buffer pool in the browser
-util.pool = __webpack_require__(43);
+util.pool = __webpack_require__(41);
 
 // utility to work with the low and high bits of a 64 bit value
-util.LongBits = __webpack_require__(44);
+util.LongBits = __webpack_require__(42);
 
 /**
  * An immuable empty array.
@@ -1105,7 +1105,7 @@ var ReflectionObject = __webpack_require__(4);
 ((Field.prototype = Object.create(ReflectionObject.prototype)).constructor = Field).className = "Field";
 
 var Enum  = __webpack_require__(1),
-    types = __webpack_require__(10),
+    types = __webpack_require__(7),
     util  = __webpack_require__(0);
 
 var Type; // cyclic
@@ -1474,6 +1474,647 @@ Field._configure = function configure(Type_) {
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
+
+module.exports = Namespace;
+
+// extends ReflectionObject
+var ReflectionObject = __webpack_require__(4);
+((Namespace.prototype = Object.create(ReflectionObject.prototype)).constructor = Namespace).className = "Namespace";
+
+var Enum     = __webpack_require__(1),
+    Field    = __webpack_require__(5),
+    util     = __webpack_require__(0);
+
+var Type,    // cyclic
+    Service; // "
+
+/**
+ * Constructs a new namespace instance.
+ * @name Namespace
+ * @classdesc Reflected namespace.
+ * @extends NamespaceBase
+ * @constructor
+ * @param {string} name Namespace name
+ * @param {Object.<string,*>} [options] Declared options
+ */
+
+/**
+ * Constructs a namespace from JSON.
+ * @memberof Namespace
+ * @function
+ * @param {string} name Namespace name
+ * @param {Object.<string,*>} json JSON object
+ * @returns {Namespace} Created namespace
+ * @throws {TypeError} If arguments are invalid
+ */
+Namespace.fromJSON = function fromJSON(name, json) {
+    return new Namespace(name, json.options).addJSON(json.nested);
+};
+
+/**
+ * Converts an array of reflection objects to JSON.
+ * @memberof Namespace
+ * @param {ReflectionObject[]} array Object array
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {Object.<string,*>|undefined} JSON object or `undefined` when array is empty
+ */
+function arrayToJSON(array, toJSONOptions) {
+    if (!(array && array.length))
+        return undefined;
+    var obj = {};
+    for (var i = 0; i < array.length; ++i)
+        obj[array[i].name] = array[i].toJSON(toJSONOptions);
+    return obj;
+}
+
+Namespace.arrayToJSON = arrayToJSON;
+
+/**
+ * Tests if the specified id is reserved.
+ * @param {Array.<number[]|string>|undefined} reserved Array of reserved ranges and names
+ * @param {number} id Id to test
+ * @returns {boolean} `true` if reserved, otherwise `false`
+ */
+Namespace.isReservedId = function isReservedId(reserved, id) {
+    if (reserved)
+        for (var i = 0; i < reserved.length; ++i)
+            if (typeof reserved[i] !== "string" && reserved[i][0] <= id && reserved[i][1] >= id)
+                return true;
+    return false;
+};
+
+/**
+ * Tests if the specified name is reserved.
+ * @param {Array.<number[]|string>|undefined} reserved Array of reserved ranges and names
+ * @param {string} name Name to test
+ * @returns {boolean} `true` if reserved, otherwise `false`
+ */
+Namespace.isReservedName = function isReservedName(reserved, name) {
+    if (reserved)
+        for (var i = 0; i < reserved.length; ++i)
+            if (reserved[i] === name)
+                return true;
+    return false;
+};
+
+/**
+ * Not an actual constructor. Use {@link Namespace} instead.
+ * @classdesc Base class of all reflection objects containing nested objects. This is not an actual class but here for the sake of having consistent type definitions.
+ * @exports NamespaceBase
+ * @extends ReflectionObject
+ * @abstract
+ * @constructor
+ * @param {string} name Namespace name
+ * @param {Object.<string,*>} [options] Declared options
+ * @see {@link Namespace}
+ */
+function Namespace(name, options) {
+    ReflectionObject.call(this, name, options);
+
+    /**
+     * Nested objects by name.
+     * @type {Object.<string,ReflectionObject>|undefined}
+     */
+    this.nested = undefined; // toJSON
+
+    /**
+     * Cached nested objects as an array.
+     * @type {ReflectionObject[]|null}
+     * @private
+     */
+    this._nestedArray = null;
+}
+
+function clearCache(namespace) {
+    namespace._nestedArray = null;
+    return namespace;
+}
+
+/**
+ * Nested objects of this namespace as an array for iteration.
+ * @name NamespaceBase#nestedArray
+ * @type {ReflectionObject[]}
+ * @readonly
+ */
+Object.defineProperty(Namespace.prototype, "nestedArray", {
+    get: function() {
+        return this._nestedArray || (this._nestedArray = util.toArray(this.nested));
+    }
+});
+
+/**
+ * Namespace descriptor.
+ * @interface INamespace
+ * @property {Object.<string,*>} [options] Namespace options
+ * @property {Object.<string,AnyNestedObject>} [nested] Nested object descriptors
+ */
+
+/**
+ * Any extension field descriptor.
+ * @typedef AnyExtensionField
+ * @type {IExtensionField|IExtensionMapField}
+ */
+
+/**
+ * Any nested object descriptor.
+ * @typedef AnyNestedObject
+ * @type {IEnum|IType|IService|AnyExtensionField|INamespace}
+ */
+// ^ BEWARE: VSCode hangs forever when using more than 5 types (that's why AnyExtensionField exists in the first place)
+
+/**
+ * Converts this namespace to a namespace descriptor.
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {INamespace} Namespace descriptor
+ */
+Namespace.prototype.toJSON = function toJSON(toJSONOptions) {
+    return util.toObject([
+        "options" , this.options,
+        "nested"  , arrayToJSON(this.nestedArray, toJSONOptions)
+    ]);
+};
+
+/**
+ * Adds nested objects to this namespace from nested object descriptors.
+ * @param {Object.<string,AnyNestedObject>} nestedJson Any nested object descriptors
+ * @returns {Namespace} `this`
+ */
+Namespace.prototype.addJSON = function addJSON(nestedJson) {
+    var ns = this;
+    /* istanbul ignore else */
+    if (nestedJson) {
+        for (var names = Object.keys(nestedJson), i = 0, nested; i < names.length; ++i) {
+            nested = nestedJson[names[i]];
+            ns.add( // most to least likely
+                ( nested.fields !== undefined
+                ? Type.fromJSON
+                : nested.values !== undefined
+                ? Enum.fromJSON
+                : nested.methods !== undefined
+                ? Service.fromJSON
+                : nested.id !== undefined
+                ? Field.fromJSON
+                : Namespace.fromJSON )(names[i], nested)
+            );
+        }
+    }
+    return this;
+};
+
+/**
+ * Gets the nested object of the specified name.
+ * @param {string} name Nested object name
+ * @returns {ReflectionObject|null} The reflection object or `null` if it doesn't exist
+ */
+Namespace.prototype.get = function get(name) {
+    return this.nested && this.nested[name]
+        || null;
+};
+
+/**
+ * Gets the values of the nested {@link Enum|enum} of the specified name.
+ * This methods differs from {@link Namespace#get|get} in that it returns an enum's values directly and throws instead of returning `null`.
+ * @param {string} name Nested enum name
+ * @returns {Object.<string,number>} Enum values
+ * @throws {Error} If there is no such enum
+ */
+Namespace.prototype.getEnum = function getEnum(name) {
+    if (this.nested && this.nested[name] instanceof Enum)
+        return this.nested[name].values;
+    throw Error("no such enum: " + name);
+};
+
+/**
+ * Adds a nested object to this namespace.
+ * @param {ReflectionObject} object Nested object to add
+ * @returns {Namespace} `this`
+ * @throws {TypeError} If arguments are invalid
+ * @throws {Error} If there is already a nested object with this name
+ */
+Namespace.prototype.add = function add(object) {
+
+    if (!(object instanceof Field && object.extend !== undefined || object instanceof Type || object instanceof Enum || object instanceof Service || object instanceof Namespace))
+        throw TypeError("object must be a valid nested object");
+
+    if (!this.nested)
+        this.nested = {};
+    else {
+        var prev = this.get(object.name);
+        if (prev) {
+            if (prev instanceof Namespace && object instanceof Namespace && !(prev instanceof Type || prev instanceof Service)) {
+                // replace plain namespace but keep existing nested elements and options
+                var nested = prev.nestedArray;
+                for (var i = 0; i < nested.length; ++i)
+                    object.add(nested[i]);
+                this.remove(prev);
+                if (!this.nested)
+                    this.nested = {};
+                object.setOptions(prev.options, true);
+
+            } else
+                throw Error("duplicate name '" + object.name + "' in " + this);
+        }
+    }
+    this.nested[object.name] = object;
+    object.onAdd(this);
+    return clearCache(this);
+};
+
+/**
+ * Removes a nested object from this namespace.
+ * @param {ReflectionObject} object Nested object to remove
+ * @returns {Namespace} `this`
+ * @throws {TypeError} If arguments are invalid
+ * @throws {Error} If `object` is not a member of this namespace
+ */
+Namespace.prototype.remove = function remove(object) {
+
+    if (!(object instanceof ReflectionObject))
+        throw TypeError("object must be a ReflectionObject");
+    if (object.parent !== this)
+        throw Error(object + " is not a member of " + this);
+
+    delete this.nested[object.name];
+    if (!Object.keys(this.nested).length)
+        this.nested = undefined;
+
+    object.onRemove(this);
+    return clearCache(this);
+};
+
+/**
+ * Defines additial namespaces within this one if not yet existing.
+ * @param {string|string[]} path Path to create
+ * @param {*} [json] Nested types to create from JSON
+ * @returns {Namespace} Pointer to the last namespace created or `this` if path is empty
+ */
+Namespace.prototype.define = function define(path, json) {
+
+    if (util.isString(path))
+        path = path.split(".");
+    else if (!Array.isArray(path))
+        throw TypeError("illegal path");
+    if (path && path.length && path[0] === "")
+        throw Error("path must be relative");
+
+    var ptr = this;
+    while (path.length > 0) {
+        var part = path.shift();
+        if (ptr.nested && ptr.nested[part]) {
+            ptr = ptr.nested[part];
+            if (!(ptr instanceof Namespace))
+                throw Error("path conflicts with non-namespace objects");
+        } else
+            ptr.add(ptr = new Namespace(part));
+    }
+    if (json)
+        ptr.addJSON(json);
+    return ptr;
+};
+
+/**
+ * Resolves this namespace's and all its nested objects' type references. Useful to validate a reflection tree, but comes at a cost.
+ * @returns {Namespace} `this`
+ */
+Namespace.prototype.resolveAll = function resolveAll() {
+    var nested = this.nestedArray, i = 0;
+    while (i < nested.length)
+        if (nested[i] instanceof Namespace)
+            nested[i++].resolveAll();
+        else
+            nested[i++].resolve();
+    return this.resolve();
+};
+
+/**
+ * Recursively looks up the reflection object matching the specified path in the scope of this namespace.
+ * @param {string|string[]} path Path to look up
+ * @param {*|Array.<*>} filterTypes Filter types, any combination of the constructors of `protobuf.Type`, `protobuf.Enum`, `protobuf.Service` etc.
+ * @param {boolean} [parentAlreadyChecked=false] If known, whether the parent has already been checked
+ * @returns {ReflectionObject|null} Looked up object or `null` if none could be found
+ */
+Namespace.prototype.lookup = function lookup(path, filterTypes, parentAlreadyChecked) {
+
+    /* istanbul ignore next */
+    if (typeof filterTypes === "boolean") {
+        parentAlreadyChecked = filterTypes;
+        filterTypes = undefined;
+    } else if (filterTypes && !Array.isArray(filterTypes))
+        filterTypes = [ filterTypes ];
+
+    if (util.isString(path) && path.length) {
+        if (path === ".")
+            return this.root;
+        path = path.split(".");
+    } else if (!path.length)
+        return this;
+
+    // Start at root if path is absolute
+    if (path[0] === "")
+        return this.root.lookup(path.slice(1), filterTypes);
+
+    // Test if the first part matches any nested object, and if so, traverse if path contains more
+    var found = this.get(path[0]);
+    if (found) {
+        if (path.length === 1) {
+            if (!filterTypes || filterTypes.indexOf(found.constructor) > -1)
+                return found;
+        } else if (found instanceof Namespace && (found = found.lookup(path.slice(1), filterTypes, true)))
+            return found;
+
+    // Otherwise try each nested namespace
+    } else
+        for (var i = 0; i < this.nestedArray.length; ++i)
+            if (this._nestedArray[i] instanceof Namespace && (found = this._nestedArray[i].lookup(path, filterTypes, true)))
+                return found;
+
+    // If there hasn't been a match, try again at the parent
+    if (this.parent === null || parentAlreadyChecked)
+        return null;
+    return this.parent.lookup(path, filterTypes);
+};
+
+/**
+ * Looks up the reflection object at the specified path, relative to this namespace.
+ * @name NamespaceBase#lookup
+ * @function
+ * @param {string|string[]} path Path to look up
+ * @param {boolean} [parentAlreadyChecked=false] Whether the parent has already been checked
+ * @returns {ReflectionObject|null} Looked up object or `null` if none could be found
+ * @variation 2
+ */
+// lookup(path: string, [parentAlreadyChecked: boolean])
+
+/**
+ * Looks up the {@link Type|type} at the specified path, relative to this namespace.
+ * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
+ * @param {string|string[]} path Path to look up
+ * @returns {Type} Looked up type
+ * @throws {Error} If `path` does not point to a type
+ */
+Namespace.prototype.lookupType = function lookupType(path) {
+    var found = this.lookup(path, [ Type ]);
+    if (!found)
+        throw Error("no such type: " + path);
+    return found;
+};
+
+/**
+ * Looks up the values of the {@link Enum|enum} at the specified path, relative to this namespace.
+ * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
+ * @param {string|string[]} path Path to look up
+ * @returns {Enum} Looked up enum
+ * @throws {Error} If `path` does not point to an enum
+ */
+Namespace.prototype.lookupEnum = function lookupEnum(path) {
+    var found = this.lookup(path, [ Enum ]);
+    if (!found)
+        throw Error("no such Enum '" + path + "' in " + this);
+    return found;
+};
+
+/**
+ * Looks up the {@link Type|type} or {@link Enum|enum} at the specified path, relative to this namespace.
+ * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
+ * @param {string|string[]} path Path to look up
+ * @returns {Type} Looked up type or enum
+ * @throws {Error} If `path` does not point to a type or enum
+ */
+Namespace.prototype.lookupTypeOrEnum = function lookupTypeOrEnum(path) {
+    var found = this.lookup(path, [ Type, Enum ]);
+    if (!found)
+        throw Error("no such Type or Enum '" + path + "' in " + this);
+    return found;
+};
+
+/**
+ * Looks up the {@link Service|service} at the specified path, relative to this namespace.
+ * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
+ * @param {string|string[]} path Path to look up
+ * @returns {Service} Looked up service
+ * @throws {Error} If `path` does not point to a service
+ */
+Namespace.prototype.lookupService = function lookupService(path) {
+    var found = this.lookup(path, [ Service ]);
+    if (!found)
+        throw Error("no such Service '" + path + "' in " + this);
+    return found;
+};
+
+Namespace._configure = function(Type_, Service_) {
+    Type    = Type_;
+    Service = Service_;
+};
+
+
+/***/ }),
+/* 7 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+/**
+ * Common type constants.
+ * @namespace
+ */
+var types = exports;
+
+var util = __webpack_require__(0);
+
+var s = [
+    "double",   // 0
+    "float",    // 1
+    "int32",    // 2
+    "uint32",   // 3
+    "sint32",   // 4
+    "fixed32",  // 5
+    "sfixed32", // 6
+    "int64",    // 7
+    "uint64",   // 8
+    "sint64",   // 9
+    "fixed64",  // 10
+    "sfixed64", // 11
+    "bool",     // 12
+    "string",   // 13
+    "bytes"     // 14
+];
+
+function bake(values, offset) {
+    var i = 0, o = {};
+    offset |= 0;
+    while (i < values.length) o[s[i + offset]] = values[i++];
+    return o;
+}
+
+/**
+ * Basic type wire types.
+ * @type {Object.<string,number>}
+ * @const
+ * @property {number} double=1 Fixed64 wire type
+ * @property {number} float=5 Fixed32 wire type
+ * @property {number} int32=0 Varint wire type
+ * @property {number} uint32=0 Varint wire type
+ * @property {number} sint32=0 Varint wire type
+ * @property {number} fixed32=5 Fixed32 wire type
+ * @property {number} sfixed32=5 Fixed32 wire type
+ * @property {number} int64=0 Varint wire type
+ * @property {number} uint64=0 Varint wire type
+ * @property {number} sint64=0 Varint wire type
+ * @property {number} fixed64=1 Fixed64 wire type
+ * @property {number} sfixed64=1 Fixed64 wire type
+ * @property {number} bool=0 Varint wire type
+ * @property {number} string=2 Ldelim wire type
+ * @property {number} bytes=2 Ldelim wire type
+ */
+types.basic = bake([
+    /* double   */ 1,
+    /* float    */ 5,
+    /* int32    */ 0,
+    /* uint32   */ 0,
+    /* sint32   */ 0,
+    /* fixed32  */ 5,
+    /* sfixed32 */ 5,
+    /* int64    */ 0,
+    /* uint64   */ 0,
+    /* sint64   */ 0,
+    /* fixed64  */ 1,
+    /* sfixed64 */ 1,
+    /* bool     */ 0,
+    /* string   */ 2,
+    /* bytes    */ 2
+]);
+
+/**
+ * Basic type defaults.
+ * @type {Object.<string,*>}
+ * @const
+ * @property {number} double=0 Double default
+ * @property {number} float=0 Float default
+ * @property {number} int32=0 Int32 default
+ * @property {number} uint32=0 Uint32 default
+ * @property {number} sint32=0 Sint32 default
+ * @property {number} fixed32=0 Fixed32 default
+ * @property {number} sfixed32=0 Sfixed32 default
+ * @property {number} int64=0 Int64 default
+ * @property {number} uint64=0 Uint64 default
+ * @property {number} sint64=0 Sint32 default
+ * @property {number} fixed64=0 Fixed64 default
+ * @property {number} sfixed64=0 Sfixed64 default
+ * @property {boolean} bool=false Bool default
+ * @property {string} string="" String default
+ * @property {Array.<number>} bytes=Array(0) Bytes default
+ * @property {null} message=null Message default
+ */
+types.defaults = bake([
+    /* double   */ 0,
+    /* float    */ 0,
+    /* int32    */ 0,
+    /* uint32   */ 0,
+    /* sint32   */ 0,
+    /* fixed32  */ 0,
+    /* sfixed32 */ 0,
+    /* int64    */ 0,
+    /* uint64   */ 0,
+    /* sint64   */ 0,
+    /* fixed64  */ 0,
+    /* sfixed64 */ 0,
+    /* bool     */ false,
+    /* string   */ "",
+    /* bytes    */ util.emptyArray,
+    /* message  */ null
+]);
+
+/**
+ * Basic long type wire types.
+ * @type {Object.<string,number>}
+ * @const
+ * @property {number} int64=0 Varint wire type
+ * @property {number} uint64=0 Varint wire type
+ * @property {number} sint64=0 Varint wire type
+ * @property {number} fixed64=1 Fixed64 wire type
+ * @property {number} sfixed64=1 Fixed64 wire type
+ */
+types.long = bake([
+    /* int64    */ 0,
+    /* uint64   */ 0,
+    /* sint64   */ 0,
+    /* fixed64  */ 1,
+    /* sfixed64 */ 1
+], 7);
+
+/**
+ * Allowed types for map keys with their associated wire type.
+ * @type {Object.<string,number>}
+ * @const
+ * @property {number} int32=0 Varint wire type
+ * @property {number} uint32=0 Varint wire type
+ * @property {number} sint32=0 Varint wire type
+ * @property {number} fixed32=5 Fixed32 wire type
+ * @property {number} sfixed32=5 Fixed32 wire type
+ * @property {number} int64=0 Varint wire type
+ * @property {number} uint64=0 Varint wire type
+ * @property {number} sint64=0 Varint wire type
+ * @property {number} fixed64=1 Fixed64 wire type
+ * @property {number} sfixed64=1 Fixed64 wire type
+ * @property {number} bool=0 Varint wire type
+ * @property {number} string=2 Ldelim wire type
+ */
+types.mapKey = bake([
+    /* int32    */ 0,
+    /* uint32   */ 0,
+    /* sint32   */ 0,
+    /* fixed32  */ 5,
+    /* sfixed32 */ 5,
+    /* int64    */ 0,
+    /* uint64   */ 0,
+    /* sint64   */ 0,
+    /* fixed64  */ 1,
+    /* sfixed64 */ 1,
+    /* bool     */ 0,
+    /* string   */ 2
+], 2);
+
+/**
+ * Allowed types for packed repeated fields with their associated wire type.
+ * @type {Object.<string,number>}
+ * @const
+ * @property {number} double=1 Fixed64 wire type
+ * @property {number} float=5 Fixed32 wire type
+ * @property {number} int32=0 Varint wire type
+ * @property {number} uint32=0 Varint wire type
+ * @property {number} sint32=0 Varint wire type
+ * @property {number} fixed32=5 Fixed32 wire type
+ * @property {number} sfixed32=5 Fixed32 wire type
+ * @property {number} int64=0 Varint wire type
+ * @property {number} uint64=0 Varint wire type
+ * @property {number} sint64=0 Varint wire type
+ * @property {number} fixed64=1 Fixed64 wire type
+ * @property {number} sfixed64=1 Fixed64 wire type
+ * @property {number} bool=0 Varint wire type
+ */
+types.packed = bake([
+    /* double   */ 1,
+    /* float    */ 5,
+    /* int32    */ 0,
+    /* uint32   */ 0,
+    /* sint32   */ 0,
+    /* fixed32  */ 5,
+    /* sfixed32 */ 5,
+    /* int64    */ 0,
+    /* uint64   */ 0,
+    /* sint64   */ 0,
+    /* fixed64  */ 1,
+    /* sfixed64 */ 1,
+    /* bool     */ 0
+]);
+
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
 /* WEBPACK VAR INJECTION */(function(global) {
 
 Object.defineProperty(exports, "__esModule", {
@@ -1523,7 +2164,7 @@ var errorExists = exports.errorExists = function errorExists(data) {
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(3)))
 
 /***/ }),
-/* 7 */
+/* 9 */
 /***/ (function(module, exports) {
 
 // Copyright Joyent, Inc. and other Node contributors.
@@ -1831,7 +2472,7 @@ function isUndefined(arg) {
 
 
 /***/ }),
-/* 8 */
+/* 10 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(process, global) {/*!
@@ -3014,648 +3655,7 @@ return Promise$1;
 
 //# sourceMappingURL=es6-promise.map
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(13), __webpack_require__(3)))
-
-/***/ }),
-/* 9 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Namespace;
-
-// extends ReflectionObject
-var ReflectionObject = __webpack_require__(4);
-((Namespace.prototype = Object.create(ReflectionObject.prototype)).constructor = Namespace).className = "Namespace";
-
-var Enum     = __webpack_require__(1),
-    Field    = __webpack_require__(5),
-    util     = __webpack_require__(0);
-
-var Type,    // cyclic
-    Service; // "
-
-/**
- * Constructs a new namespace instance.
- * @name Namespace
- * @classdesc Reflected namespace.
- * @extends NamespaceBase
- * @constructor
- * @param {string} name Namespace name
- * @param {Object.<string,*>} [options] Declared options
- */
-
-/**
- * Constructs a namespace from JSON.
- * @memberof Namespace
- * @function
- * @param {string} name Namespace name
- * @param {Object.<string,*>} json JSON object
- * @returns {Namespace} Created namespace
- * @throws {TypeError} If arguments are invalid
- */
-Namespace.fromJSON = function fromJSON(name, json) {
-    return new Namespace(name, json.options).addJSON(json.nested);
-};
-
-/**
- * Converts an array of reflection objects to JSON.
- * @memberof Namespace
- * @param {ReflectionObject[]} array Object array
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {Object.<string,*>|undefined} JSON object or `undefined` when array is empty
- */
-function arrayToJSON(array, toJSONOptions) {
-    if (!(array && array.length))
-        return undefined;
-    var obj = {};
-    for (var i = 0; i < array.length; ++i)
-        obj[array[i].name] = array[i].toJSON(toJSONOptions);
-    return obj;
-}
-
-Namespace.arrayToJSON = arrayToJSON;
-
-/**
- * Tests if the specified id is reserved.
- * @param {Array.<number[]|string>|undefined} reserved Array of reserved ranges and names
- * @param {number} id Id to test
- * @returns {boolean} `true` if reserved, otherwise `false`
- */
-Namespace.isReservedId = function isReservedId(reserved, id) {
-    if (reserved)
-        for (var i = 0; i < reserved.length; ++i)
-            if (typeof reserved[i] !== "string" && reserved[i][0] <= id && reserved[i][1] >= id)
-                return true;
-    return false;
-};
-
-/**
- * Tests if the specified name is reserved.
- * @param {Array.<number[]|string>|undefined} reserved Array of reserved ranges and names
- * @param {string} name Name to test
- * @returns {boolean} `true` if reserved, otherwise `false`
- */
-Namespace.isReservedName = function isReservedName(reserved, name) {
-    if (reserved)
-        for (var i = 0; i < reserved.length; ++i)
-            if (reserved[i] === name)
-                return true;
-    return false;
-};
-
-/**
- * Not an actual constructor. Use {@link Namespace} instead.
- * @classdesc Base class of all reflection objects containing nested objects. This is not an actual class but here for the sake of having consistent type definitions.
- * @exports NamespaceBase
- * @extends ReflectionObject
- * @abstract
- * @constructor
- * @param {string} name Namespace name
- * @param {Object.<string,*>} [options] Declared options
- * @see {@link Namespace}
- */
-function Namespace(name, options) {
-    ReflectionObject.call(this, name, options);
-
-    /**
-     * Nested objects by name.
-     * @type {Object.<string,ReflectionObject>|undefined}
-     */
-    this.nested = undefined; // toJSON
-
-    /**
-     * Cached nested objects as an array.
-     * @type {ReflectionObject[]|null}
-     * @private
-     */
-    this._nestedArray = null;
-}
-
-function clearCache(namespace) {
-    namespace._nestedArray = null;
-    return namespace;
-}
-
-/**
- * Nested objects of this namespace as an array for iteration.
- * @name NamespaceBase#nestedArray
- * @type {ReflectionObject[]}
- * @readonly
- */
-Object.defineProperty(Namespace.prototype, "nestedArray", {
-    get: function() {
-        return this._nestedArray || (this._nestedArray = util.toArray(this.nested));
-    }
-});
-
-/**
- * Namespace descriptor.
- * @interface INamespace
- * @property {Object.<string,*>} [options] Namespace options
- * @property {Object.<string,AnyNestedObject>} [nested] Nested object descriptors
- */
-
-/**
- * Any extension field descriptor.
- * @typedef AnyExtensionField
- * @type {IExtensionField|IExtensionMapField}
- */
-
-/**
- * Any nested object descriptor.
- * @typedef AnyNestedObject
- * @type {IEnum|IType|IService|AnyExtensionField|INamespace}
- */
-// ^ BEWARE: VSCode hangs forever when using more than 5 types (that's why AnyExtensionField exists in the first place)
-
-/**
- * Converts this namespace to a namespace descriptor.
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {INamespace} Namespace descriptor
- */
-Namespace.prototype.toJSON = function toJSON(toJSONOptions) {
-    return util.toObject([
-        "options" , this.options,
-        "nested"  , arrayToJSON(this.nestedArray, toJSONOptions)
-    ]);
-};
-
-/**
- * Adds nested objects to this namespace from nested object descriptors.
- * @param {Object.<string,AnyNestedObject>} nestedJson Any nested object descriptors
- * @returns {Namespace} `this`
- */
-Namespace.prototype.addJSON = function addJSON(nestedJson) {
-    var ns = this;
-    /* istanbul ignore else */
-    if (nestedJson) {
-        for (var names = Object.keys(nestedJson), i = 0, nested; i < names.length; ++i) {
-            nested = nestedJson[names[i]];
-            ns.add( // most to least likely
-                ( nested.fields !== undefined
-                ? Type.fromJSON
-                : nested.values !== undefined
-                ? Enum.fromJSON
-                : nested.methods !== undefined
-                ? Service.fromJSON
-                : nested.id !== undefined
-                ? Field.fromJSON
-                : Namespace.fromJSON )(names[i], nested)
-            );
-        }
-    }
-    return this;
-};
-
-/**
- * Gets the nested object of the specified name.
- * @param {string} name Nested object name
- * @returns {ReflectionObject|null} The reflection object or `null` if it doesn't exist
- */
-Namespace.prototype.get = function get(name) {
-    return this.nested && this.nested[name]
-        || null;
-};
-
-/**
- * Gets the values of the nested {@link Enum|enum} of the specified name.
- * This methods differs from {@link Namespace#get|get} in that it returns an enum's values directly and throws instead of returning `null`.
- * @param {string} name Nested enum name
- * @returns {Object.<string,number>} Enum values
- * @throws {Error} If there is no such enum
- */
-Namespace.prototype.getEnum = function getEnum(name) {
-    if (this.nested && this.nested[name] instanceof Enum)
-        return this.nested[name].values;
-    throw Error("no such enum: " + name);
-};
-
-/**
- * Adds a nested object to this namespace.
- * @param {ReflectionObject} object Nested object to add
- * @returns {Namespace} `this`
- * @throws {TypeError} If arguments are invalid
- * @throws {Error} If there is already a nested object with this name
- */
-Namespace.prototype.add = function add(object) {
-
-    if (!(object instanceof Field && object.extend !== undefined || object instanceof Type || object instanceof Enum || object instanceof Service || object instanceof Namespace))
-        throw TypeError("object must be a valid nested object");
-
-    if (!this.nested)
-        this.nested = {};
-    else {
-        var prev = this.get(object.name);
-        if (prev) {
-            if (prev instanceof Namespace && object instanceof Namespace && !(prev instanceof Type || prev instanceof Service)) {
-                // replace plain namespace but keep existing nested elements and options
-                var nested = prev.nestedArray;
-                for (var i = 0; i < nested.length; ++i)
-                    object.add(nested[i]);
-                this.remove(prev);
-                if (!this.nested)
-                    this.nested = {};
-                object.setOptions(prev.options, true);
-
-            } else
-                throw Error("duplicate name '" + object.name + "' in " + this);
-        }
-    }
-    this.nested[object.name] = object;
-    object.onAdd(this);
-    return clearCache(this);
-};
-
-/**
- * Removes a nested object from this namespace.
- * @param {ReflectionObject} object Nested object to remove
- * @returns {Namespace} `this`
- * @throws {TypeError} If arguments are invalid
- * @throws {Error} If `object` is not a member of this namespace
- */
-Namespace.prototype.remove = function remove(object) {
-
-    if (!(object instanceof ReflectionObject))
-        throw TypeError("object must be a ReflectionObject");
-    if (object.parent !== this)
-        throw Error(object + " is not a member of " + this);
-
-    delete this.nested[object.name];
-    if (!Object.keys(this.nested).length)
-        this.nested = undefined;
-
-    object.onRemove(this);
-    return clearCache(this);
-};
-
-/**
- * Defines additial namespaces within this one if not yet existing.
- * @param {string|string[]} path Path to create
- * @param {*} [json] Nested types to create from JSON
- * @returns {Namespace} Pointer to the last namespace created or `this` if path is empty
- */
-Namespace.prototype.define = function define(path, json) {
-
-    if (util.isString(path))
-        path = path.split(".");
-    else if (!Array.isArray(path))
-        throw TypeError("illegal path");
-    if (path && path.length && path[0] === "")
-        throw Error("path must be relative");
-
-    var ptr = this;
-    while (path.length > 0) {
-        var part = path.shift();
-        if (ptr.nested && ptr.nested[part]) {
-            ptr = ptr.nested[part];
-            if (!(ptr instanceof Namespace))
-                throw Error("path conflicts with non-namespace objects");
-        } else
-            ptr.add(ptr = new Namespace(part));
-    }
-    if (json)
-        ptr.addJSON(json);
-    return ptr;
-};
-
-/**
- * Resolves this namespace's and all its nested objects' type references. Useful to validate a reflection tree, but comes at a cost.
- * @returns {Namespace} `this`
- */
-Namespace.prototype.resolveAll = function resolveAll() {
-    var nested = this.nestedArray, i = 0;
-    while (i < nested.length)
-        if (nested[i] instanceof Namespace)
-            nested[i++].resolveAll();
-        else
-            nested[i++].resolve();
-    return this.resolve();
-};
-
-/**
- * Recursively looks up the reflection object matching the specified path in the scope of this namespace.
- * @param {string|string[]} path Path to look up
- * @param {*|Array.<*>} filterTypes Filter types, any combination of the constructors of `protobuf.Type`, `protobuf.Enum`, `protobuf.Service` etc.
- * @param {boolean} [parentAlreadyChecked=false] If known, whether the parent has already been checked
- * @returns {ReflectionObject|null} Looked up object or `null` if none could be found
- */
-Namespace.prototype.lookup = function lookup(path, filterTypes, parentAlreadyChecked) {
-
-    /* istanbul ignore next */
-    if (typeof filterTypes === "boolean") {
-        parentAlreadyChecked = filterTypes;
-        filterTypes = undefined;
-    } else if (filterTypes && !Array.isArray(filterTypes))
-        filterTypes = [ filterTypes ];
-
-    if (util.isString(path) && path.length) {
-        if (path === ".")
-            return this.root;
-        path = path.split(".");
-    } else if (!path.length)
-        return this;
-
-    // Start at root if path is absolute
-    if (path[0] === "")
-        return this.root.lookup(path.slice(1), filterTypes);
-
-    // Test if the first part matches any nested object, and if so, traverse if path contains more
-    var found = this.get(path[0]);
-    if (found) {
-        if (path.length === 1) {
-            if (!filterTypes || filterTypes.indexOf(found.constructor) > -1)
-                return found;
-        } else if (found instanceof Namespace && (found = found.lookup(path.slice(1), filterTypes, true)))
-            return found;
-
-    // Otherwise try each nested namespace
-    } else
-        for (var i = 0; i < this.nestedArray.length; ++i)
-            if (this._nestedArray[i] instanceof Namespace && (found = this._nestedArray[i].lookup(path, filterTypes, true)))
-                return found;
-
-    // If there hasn't been a match, try again at the parent
-    if (this.parent === null || parentAlreadyChecked)
-        return null;
-    return this.parent.lookup(path, filterTypes);
-};
-
-/**
- * Looks up the reflection object at the specified path, relative to this namespace.
- * @name NamespaceBase#lookup
- * @function
- * @param {string|string[]} path Path to look up
- * @param {boolean} [parentAlreadyChecked=false] Whether the parent has already been checked
- * @returns {ReflectionObject|null} Looked up object or `null` if none could be found
- * @variation 2
- */
-// lookup(path: string, [parentAlreadyChecked: boolean])
-
-/**
- * Looks up the {@link Type|type} at the specified path, relative to this namespace.
- * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
- * @param {string|string[]} path Path to look up
- * @returns {Type} Looked up type
- * @throws {Error} If `path` does not point to a type
- */
-Namespace.prototype.lookupType = function lookupType(path) {
-    var found = this.lookup(path, [ Type ]);
-    if (!found)
-        throw Error("no such type: " + path);
-    return found;
-};
-
-/**
- * Looks up the values of the {@link Enum|enum} at the specified path, relative to this namespace.
- * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
- * @param {string|string[]} path Path to look up
- * @returns {Enum} Looked up enum
- * @throws {Error} If `path` does not point to an enum
- */
-Namespace.prototype.lookupEnum = function lookupEnum(path) {
-    var found = this.lookup(path, [ Enum ]);
-    if (!found)
-        throw Error("no such Enum '" + path + "' in " + this);
-    return found;
-};
-
-/**
- * Looks up the {@link Type|type} or {@link Enum|enum} at the specified path, relative to this namespace.
- * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
- * @param {string|string[]} path Path to look up
- * @returns {Type} Looked up type or enum
- * @throws {Error} If `path` does not point to a type or enum
- */
-Namespace.prototype.lookupTypeOrEnum = function lookupTypeOrEnum(path) {
-    var found = this.lookup(path, [ Type, Enum ]);
-    if (!found)
-        throw Error("no such Type or Enum '" + path + "' in " + this);
-    return found;
-};
-
-/**
- * Looks up the {@link Service|service} at the specified path, relative to this namespace.
- * Besides its signature, this methods differs from {@link Namespace#lookup|lookup} in that it throws instead of returning `null`.
- * @param {string|string[]} path Path to look up
- * @returns {Service} Looked up service
- * @throws {Error} If `path` does not point to a service
- */
-Namespace.prototype.lookupService = function lookupService(path) {
-    var found = this.lookup(path, [ Service ]);
-    if (!found)
-        throw Error("no such Service '" + path + "' in " + this);
-    return found;
-};
-
-Namespace._configure = function(Type_, Service_) {
-    Type    = Type_;
-    Service = Service_;
-};
-
-
-/***/ }),
-/* 10 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-/**
- * Common type constants.
- * @namespace
- */
-var types = exports;
-
-var util = __webpack_require__(0);
-
-var s = [
-    "double",   // 0
-    "float",    // 1
-    "int32",    // 2
-    "uint32",   // 3
-    "sint32",   // 4
-    "fixed32",  // 5
-    "sfixed32", // 6
-    "int64",    // 7
-    "uint64",   // 8
-    "sint64",   // 9
-    "fixed64",  // 10
-    "sfixed64", // 11
-    "bool",     // 12
-    "string",   // 13
-    "bytes"     // 14
-];
-
-function bake(values, offset) {
-    var i = 0, o = {};
-    offset |= 0;
-    while (i < values.length) o[s[i + offset]] = values[i++];
-    return o;
-}
-
-/**
- * Basic type wire types.
- * @type {Object.<string,number>}
- * @const
- * @property {number} double=1 Fixed64 wire type
- * @property {number} float=5 Fixed32 wire type
- * @property {number} int32=0 Varint wire type
- * @property {number} uint32=0 Varint wire type
- * @property {number} sint32=0 Varint wire type
- * @property {number} fixed32=5 Fixed32 wire type
- * @property {number} sfixed32=5 Fixed32 wire type
- * @property {number} int64=0 Varint wire type
- * @property {number} uint64=0 Varint wire type
- * @property {number} sint64=0 Varint wire type
- * @property {number} fixed64=1 Fixed64 wire type
- * @property {number} sfixed64=1 Fixed64 wire type
- * @property {number} bool=0 Varint wire type
- * @property {number} string=2 Ldelim wire type
- * @property {number} bytes=2 Ldelim wire type
- */
-types.basic = bake([
-    /* double   */ 1,
-    /* float    */ 5,
-    /* int32    */ 0,
-    /* uint32   */ 0,
-    /* sint32   */ 0,
-    /* fixed32  */ 5,
-    /* sfixed32 */ 5,
-    /* int64    */ 0,
-    /* uint64   */ 0,
-    /* sint64   */ 0,
-    /* fixed64  */ 1,
-    /* sfixed64 */ 1,
-    /* bool     */ 0,
-    /* string   */ 2,
-    /* bytes    */ 2
-]);
-
-/**
- * Basic type defaults.
- * @type {Object.<string,*>}
- * @const
- * @property {number} double=0 Double default
- * @property {number} float=0 Float default
- * @property {number} int32=0 Int32 default
- * @property {number} uint32=0 Uint32 default
- * @property {number} sint32=0 Sint32 default
- * @property {number} fixed32=0 Fixed32 default
- * @property {number} sfixed32=0 Sfixed32 default
- * @property {number} int64=0 Int64 default
- * @property {number} uint64=0 Uint64 default
- * @property {number} sint64=0 Sint32 default
- * @property {number} fixed64=0 Fixed64 default
- * @property {number} sfixed64=0 Sfixed64 default
- * @property {boolean} bool=false Bool default
- * @property {string} string="" String default
- * @property {Array.<number>} bytes=Array(0) Bytes default
- * @property {null} message=null Message default
- */
-types.defaults = bake([
-    /* double   */ 0,
-    /* float    */ 0,
-    /* int32    */ 0,
-    /* uint32   */ 0,
-    /* sint32   */ 0,
-    /* fixed32  */ 0,
-    /* sfixed32 */ 0,
-    /* int64    */ 0,
-    /* uint64   */ 0,
-    /* sint64   */ 0,
-    /* fixed64  */ 0,
-    /* sfixed64 */ 0,
-    /* bool     */ false,
-    /* string   */ "",
-    /* bytes    */ util.emptyArray,
-    /* message  */ null
-]);
-
-/**
- * Basic long type wire types.
- * @type {Object.<string,number>}
- * @const
- * @property {number} int64=0 Varint wire type
- * @property {number} uint64=0 Varint wire type
- * @property {number} sint64=0 Varint wire type
- * @property {number} fixed64=1 Fixed64 wire type
- * @property {number} sfixed64=1 Fixed64 wire type
- */
-types.long = bake([
-    /* int64    */ 0,
-    /* uint64   */ 0,
-    /* sint64   */ 0,
-    /* fixed64  */ 1,
-    /* sfixed64 */ 1
-], 7);
-
-/**
- * Allowed types for map keys with their associated wire type.
- * @type {Object.<string,number>}
- * @const
- * @property {number} int32=0 Varint wire type
- * @property {number} uint32=0 Varint wire type
- * @property {number} sint32=0 Varint wire type
- * @property {number} fixed32=5 Fixed32 wire type
- * @property {number} sfixed32=5 Fixed32 wire type
- * @property {number} int64=0 Varint wire type
- * @property {number} uint64=0 Varint wire type
- * @property {number} sint64=0 Varint wire type
- * @property {number} fixed64=1 Fixed64 wire type
- * @property {number} sfixed64=1 Fixed64 wire type
- * @property {number} bool=0 Varint wire type
- * @property {number} string=2 Ldelim wire type
- */
-types.mapKey = bake([
-    /* int32    */ 0,
-    /* uint32   */ 0,
-    /* sint32   */ 0,
-    /* fixed32  */ 5,
-    /* sfixed32 */ 5,
-    /* int64    */ 0,
-    /* uint64   */ 0,
-    /* sint64   */ 0,
-    /* fixed64  */ 1,
-    /* sfixed64 */ 1,
-    /* bool     */ 0,
-    /* string   */ 2
-], 2);
-
-/**
- * Allowed types for packed repeated fields with their associated wire type.
- * @type {Object.<string,number>}
- * @const
- * @property {number} double=1 Fixed64 wire type
- * @property {number} float=5 Fixed32 wire type
- * @property {number} int32=0 Varint wire type
- * @property {number} uint32=0 Varint wire type
- * @property {number} sint32=0 Varint wire type
- * @property {number} fixed32=5 Fixed32 wire type
- * @property {number} sfixed32=5 Fixed32 wire type
- * @property {number} int64=0 Varint wire type
- * @property {number} uint64=0 Varint wire type
- * @property {number} sint64=0 Varint wire type
- * @property {number} fixed64=1 Fixed64 wire type
- * @property {number} sfixed64=1 Fixed64 wire type
- * @property {number} bool=0 Varint wire type
- */
-types.packed = bake([
-    /* double   */ 1,
-    /* float    */ 5,
-    /* int32    */ 0,
-    /* uint32   */ 0,
-    /* sint32   */ 0,
-    /* fixed32  */ 5,
-    /* sfixed32 */ 5,
-    /* int64    */ 0,
-    /* uint64   */ 0,
-    /* sint64   */ 0,
-    /* fixed64  */ 1,
-    /* sfixed64 */ 1,
-    /* bool     */ 0
-]);
-
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(17), __webpack_require__(3)))
 
 /***/ }),
 /* 11 */
@@ -3663,100 +3663,1237 @@ types.packed = bake([
 
 "use strict";
 
+module.exports = Writer;
 
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
+var util      = __webpack_require__(2);
 
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+var BufferWriter; // cyclic
 
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+var LongBits  = util.LongBits,
+    base64    = util.base64,
+    utf8      = util.utf8;
 
-var methodType = exports.methodType = {
-  CONNECT: 'connect',
-  REFRESH: 'refresh',
-  SUBSCRIBE: 'subscribe',
-  UNSUBSCRIBE: 'unsubscribe',
-  PUBLISH: 'publish',
-  PRESENCE: 'presence',
-  PRESENCE_STATS: 'presence_stats',
-  HISTORY: 'history',
-  PING: 'ping',
-  RPC: 'rpc',
-  MESSAGE: 'message'
+/**
+ * Constructs a new writer operation instance.
+ * @classdesc Scheduled writer operation.
+ * @constructor
+ * @param {function(*, Uint8Array, number)} fn Function to call
+ * @param {number} len Value byte length
+ * @param {*} val Value to write
+ * @ignore
+ */
+function Op(fn, len, val) {
+
+    /**
+     * Function to call.
+     * @type {function(Uint8Array, number, *)}
+     */
+    this.fn = fn;
+
+    /**
+     * Value byte length.
+     * @type {number}
+     */
+    this.len = len;
+
+    /**
+     * Next operation.
+     * @type {Writer.Op|undefined}
+     */
+    this.next = undefined;
+
+    /**
+     * Value to write.
+     * @type {*}
+     */
+    this.val = val; // type varies
+}
+
+/* istanbul ignore next */
+function noop() {} // eslint-disable-line no-empty-function
+
+/**
+ * Constructs a new writer state instance.
+ * @classdesc Copied writer state.
+ * @memberof Writer
+ * @constructor
+ * @param {Writer} writer Writer to copy state from
+ * @ignore
+ */
+function State(writer) {
+
+    /**
+     * Current head.
+     * @type {Writer.Op}
+     */
+    this.head = writer.head;
+
+    /**
+     * Current tail.
+     * @type {Writer.Op}
+     */
+    this.tail = writer.tail;
+
+    /**
+     * Current buffer length.
+     * @type {number}
+     */
+    this.len = writer.len;
+
+    /**
+     * Next state.
+     * @type {State|null}
+     */
+    this.next = writer.states;
+}
+
+/**
+ * Constructs a new writer instance.
+ * @classdesc Wire format writer using `Uint8Array` if available, otherwise `Array`.
+ * @constructor
+ */
+function Writer() {
+
+    /**
+     * Current length.
+     * @type {number}
+     */
+    this.len = 0;
+
+    /**
+     * Operations head.
+     * @type {Object}
+     */
+    this.head = new Op(noop, 0, 0);
+
+    /**
+     * Operations tail
+     * @type {Object}
+     */
+    this.tail = this.head;
+
+    /**
+     * Linked forked states.
+     * @type {Object|null}
+     */
+    this.states = null;
+
+    // When a value is written, the writer calculates its byte length and puts it into a linked
+    // list of operations to perform when finish() is called. This both allows us to allocate
+    // buffers of the exact required size and reduces the amount of work we have to do compared
+    // to first calculating over objects and then encoding over objects. In our case, the encoding
+    // part is just a linked list walk calling operations with already prepared values.
+}
+
+/**
+ * Creates a new writer.
+ * @function
+ * @returns {BufferWriter|Writer} A {@link BufferWriter} when Buffers are supported, otherwise a {@link Writer}
+ */
+Writer.create = util.Buffer
+    ? function create_buffer_setup() {
+        return (Writer.create = function create_buffer() {
+            return new BufferWriter();
+        })();
+    }
+    /* istanbul ignore next */
+    : function create_array() {
+        return new Writer();
+    };
+
+/**
+ * Allocates a buffer of the specified size.
+ * @param {number} size Buffer size
+ * @returns {Uint8Array} Buffer
+ */
+Writer.alloc = function alloc(size) {
+    return new util.Array(size);
 };
 
-var messageType = exports.messageType = {
-  PUBLICATION: 0,
-  JOIN: 1,
-  LEAVE: 2,
-  UNSUB: 3
+// Use Uint8Array buffer pool in the browser, just like node does with buffers
+/* istanbul ignore else */
+if (util.Array !== Array)
+    Writer.alloc = util.pool(Writer.alloc, util.Array.prototype.subarray);
+
+/**
+ * Pushes a new operation to the queue.
+ * @param {function(Uint8Array, number, *)} fn Function to call
+ * @param {number} len Value byte length
+ * @param {number} val Value to write
+ * @returns {Writer} `this`
+ * @private
+ */
+Writer.prototype._push = function push(fn, len, val) {
+    this.tail = this.tail.next = new Op(fn, len, val);
+    this.len += len;
+    return this;
 };
 
-var JsonEncoder = exports.JsonEncoder = function () {
-  function JsonEncoder() {
-    _classCallCheck(this, JsonEncoder);
-  }
+function writeByte(val, buf, pos) {
+    buf[pos] = val & 255;
+}
 
-  _createClass(JsonEncoder, [{
-    key: 'encodeCommands',
-    value: function encodeCommands(commands) {
-      var encodedCommands = [];
-      for (var i in commands) {
-        if (commands.hasOwnProperty(i)) {
-          encodedCommands.push(JSON.stringify(commands[i]));
-        }
-      }
-      return encodedCommands.join('\n');
+function writeVarint32(val, buf, pos) {
+    while (val > 127) {
+        buf[pos++] = val & 127 | 128;
+        val >>>= 7;
     }
-  }]);
+    buf[pos] = val;
+}
 
-  return JsonEncoder;
-}();
+/**
+ * Constructs a new varint writer operation instance.
+ * @classdesc Scheduled varint writer operation.
+ * @extends Op
+ * @constructor
+ * @param {number} len Value byte length
+ * @param {number} val Value to write
+ * @ignore
+ */
+function VarintOp(len, val) {
+    this.len = len;
+    this.next = undefined;
+    this.val = val;
+}
 
-var JsonDecoder = exports.JsonDecoder = function () {
-  function JsonDecoder() {
-    _classCallCheck(this, JsonDecoder);
-  }
+VarintOp.prototype = Object.create(Op.prototype);
+VarintOp.prototype.fn = writeVarint32;
 
-  _createClass(JsonDecoder, [{
-    key: 'decodeReplies',
-    value: function decodeReplies(data) {
-      var replies = [];
-      var encodedReplies = data.split('\n');
-      for (var i in encodedReplies) {
-        if (encodedReplies.hasOwnProperty(i)) {
-          if (!encodedReplies[i]) {
-            continue;
-          }
-          var reply = JSON.parse(encodedReplies[i]);
-          replies.push(reply);
-        }
-      }
-      return replies;
-    }
-  }, {
-    key: 'decodeCommandResult',
-    value: function decodeCommandResult(methodType, data) {
-      return data;
-    }
-  }, {
-    key: 'decodeMessage',
-    value: function decodeMessage(data) {
-      return data;
-    }
-  }, {
-    key: 'decodeMessageData',
-    value: function decodeMessageData(messageType, data) {
-      return data;
-    }
-  }]);
+/**
+ * Writes an unsigned 32 bit value as a varint.
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.uint32 = function write_uint32(value) {
+    // here, the call to this.push has been inlined and a varint specific Op subclass is used.
+    // uint32 is by far the most frequently used operation and benefits significantly from this.
+    this.len += (this.tail = this.tail.next = new VarintOp(
+        (value = value >>> 0)
+                < 128       ? 1
+        : value < 16384     ? 2
+        : value < 2097152   ? 3
+        : value < 268435456 ? 4
+        :                     5,
+    value)).len;
+    return this;
+};
 
-  return JsonDecoder;
-}();
+/**
+ * Writes a signed 32 bit value as a varint.
+ * @function
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.int32 = function write_int32(value) {
+    return value < 0
+        ? this._push(writeVarint64, 10, LongBits.fromNumber(value)) // 10 bytes per spec
+        : this.uint32(value);
+};
+
+/**
+ * Writes a 32 bit value as a varint, zig-zag encoded.
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.sint32 = function write_sint32(value) {
+    return this.uint32((value << 1 ^ value >> 31) >>> 0);
+};
+
+function writeVarint64(val, buf, pos) {
+    while (val.hi) {
+        buf[pos++] = val.lo & 127 | 128;
+        val.lo = (val.lo >>> 7 | val.hi << 25) >>> 0;
+        val.hi >>>= 7;
+    }
+    while (val.lo > 127) {
+        buf[pos++] = val.lo & 127 | 128;
+        val.lo = val.lo >>> 7;
+    }
+    buf[pos++] = val.lo;
+}
+
+/**
+ * Writes an unsigned 64 bit value as a varint.
+ * @param {Long|number|string} value Value to write
+ * @returns {Writer} `this`
+ * @throws {TypeError} If `value` is a string and no long library is present.
+ */
+Writer.prototype.uint64 = function write_uint64(value) {
+    var bits = LongBits.from(value);
+    return this._push(writeVarint64, bits.length(), bits);
+};
+
+/**
+ * Writes a signed 64 bit value as a varint.
+ * @function
+ * @param {Long|number|string} value Value to write
+ * @returns {Writer} `this`
+ * @throws {TypeError} If `value` is a string and no long library is present.
+ */
+Writer.prototype.int64 = Writer.prototype.uint64;
+
+/**
+ * Writes a signed 64 bit value as a varint, zig-zag encoded.
+ * @param {Long|number|string} value Value to write
+ * @returns {Writer} `this`
+ * @throws {TypeError} If `value` is a string and no long library is present.
+ */
+Writer.prototype.sint64 = function write_sint64(value) {
+    var bits = LongBits.from(value).zzEncode();
+    return this._push(writeVarint64, bits.length(), bits);
+};
+
+/**
+ * Writes a boolish value as a varint.
+ * @param {boolean} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.bool = function write_bool(value) {
+    return this._push(writeByte, 1, value ? 1 : 0);
+};
+
+function writeFixed32(val, buf, pos) {
+    buf[pos    ] =  val         & 255;
+    buf[pos + 1] =  val >>> 8   & 255;
+    buf[pos + 2] =  val >>> 16  & 255;
+    buf[pos + 3] =  val >>> 24;
+}
+
+/**
+ * Writes an unsigned 32 bit value as fixed 32 bits.
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.fixed32 = function write_fixed32(value) {
+    return this._push(writeFixed32, 4, value >>> 0);
+};
+
+/**
+ * Writes a signed 32 bit value as fixed 32 bits.
+ * @function
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.sfixed32 = Writer.prototype.fixed32;
+
+/**
+ * Writes an unsigned 64 bit value as fixed 64 bits.
+ * @param {Long|number|string} value Value to write
+ * @returns {Writer} `this`
+ * @throws {TypeError} If `value` is a string and no long library is present.
+ */
+Writer.prototype.fixed64 = function write_fixed64(value) {
+    var bits = LongBits.from(value);
+    return this._push(writeFixed32, 4, bits.lo)._push(writeFixed32, 4, bits.hi);
+};
+
+/**
+ * Writes a signed 64 bit value as fixed 64 bits.
+ * @function
+ * @param {Long|number|string} value Value to write
+ * @returns {Writer} `this`
+ * @throws {TypeError} If `value` is a string and no long library is present.
+ */
+Writer.prototype.sfixed64 = Writer.prototype.fixed64;
+
+/**
+ * Writes a float (32 bit).
+ * @function
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.float = function write_float(value) {
+    return this._push(util.float.writeFloatLE, 4, value);
+};
+
+/**
+ * Writes a double (64 bit float).
+ * @function
+ * @param {number} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.double = function write_double(value) {
+    return this._push(util.float.writeDoubleLE, 8, value);
+};
+
+var writeBytes = util.Array.prototype.set
+    ? function writeBytes_set(val, buf, pos) {
+        buf.set(val, pos); // also works for plain array values
+    }
+    /* istanbul ignore next */
+    : function writeBytes_for(val, buf, pos) {
+        for (var i = 0; i < val.length; ++i)
+            buf[pos + i] = val[i];
+    };
+
+/**
+ * Writes a sequence of bytes.
+ * @param {Uint8Array|string} value Buffer or base64 encoded string to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.bytes = function write_bytes(value) {
+    var len = value.length >>> 0;
+    if (!len)
+        return this._push(writeByte, 1, 0);
+    if (util.isString(value)) {
+        var buf = Writer.alloc(len = base64.length(value));
+        base64.decode(value, buf, 0);
+        value = buf;
+    }
+    return this.uint32(len)._push(writeBytes, len, value);
+};
+
+/**
+ * Writes a string.
+ * @param {string} value Value to write
+ * @returns {Writer} `this`
+ */
+Writer.prototype.string = function write_string(value) {
+    var len = utf8.length(value);
+    return len
+        ? this.uint32(len)._push(utf8.write, len, value)
+        : this._push(writeByte, 1, 0);
+};
+
+/**
+ * Forks this writer's state by pushing it to a stack.
+ * Calling {@link Writer#reset|reset} or {@link Writer#ldelim|ldelim} resets the writer to the previous state.
+ * @returns {Writer} `this`
+ */
+Writer.prototype.fork = function fork() {
+    this.states = new State(this);
+    this.head = this.tail = new Op(noop, 0, 0);
+    this.len = 0;
+    return this;
+};
+
+/**
+ * Resets this instance to the last state.
+ * @returns {Writer} `this`
+ */
+Writer.prototype.reset = function reset() {
+    if (this.states) {
+        this.head   = this.states.head;
+        this.tail   = this.states.tail;
+        this.len    = this.states.len;
+        this.states = this.states.next;
+    } else {
+        this.head = this.tail = new Op(noop, 0, 0);
+        this.len  = 0;
+    }
+    return this;
+};
+
+/**
+ * Resets to the last state and appends the fork state's current write length as a varint followed by its operations.
+ * @returns {Writer} `this`
+ */
+Writer.prototype.ldelim = function ldelim() {
+    var head = this.head,
+        tail = this.tail,
+        len  = this.len;
+    this.reset().uint32(len);
+    if (len) {
+        this.tail.next = head.next; // skip noop
+        this.tail = tail;
+        this.len += len;
+    }
+    return this;
+};
+
+/**
+ * Finishes the write operation.
+ * @returns {Uint8Array} Finished buffer
+ */
+Writer.prototype.finish = function finish() {
+    var head = this.head.next, // skip noop
+        buf  = this.constructor.alloc(this.len),
+        pos  = 0;
+    while (head) {
+        head.fn(head.val, buf, pos);
+        pos += head.len;
+        head = head.next;
+    }
+    // this.head = this.tail = null;
+    return buf;
+};
+
+Writer._configure = function(BufferWriter_) {
+    BufferWriter = BufferWriter_;
+};
+
 
 /***/ }),
 /* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Reader;
+
+var util      = __webpack_require__(2);
+
+var BufferReader; // cyclic
+
+var LongBits  = util.LongBits,
+    utf8      = util.utf8;
+
+/* istanbul ignore next */
+function indexOutOfRange(reader, writeLength) {
+    return RangeError("index out of range: " + reader.pos + " + " + (writeLength || 1) + " > " + reader.len);
+}
+
+/**
+ * Constructs a new reader instance using the specified buffer.
+ * @classdesc Wire format reader using `Uint8Array` if available, otherwise `Array`.
+ * @constructor
+ * @param {Uint8Array} buffer Buffer to read from
+ */
+function Reader(buffer) {
+
+    /**
+     * Read buffer.
+     * @type {Uint8Array}
+     */
+    this.buf = buffer;
+
+    /**
+     * Read buffer position.
+     * @type {number}
+     */
+    this.pos = 0;
+
+    /**
+     * Read buffer length.
+     * @type {number}
+     */
+    this.len = buffer.length;
+}
+
+var create_array = typeof Uint8Array !== "undefined"
+    ? function create_typed_array(buffer) {
+        if (buffer instanceof Uint8Array || Array.isArray(buffer))
+            return new Reader(buffer);
+        throw Error("illegal buffer");
+    }
+    /* istanbul ignore next */
+    : function create_array(buffer) {
+        if (Array.isArray(buffer))
+            return new Reader(buffer);
+        throw Error("illegal buffer");
+    };
+
+/**
+ * Creates a new reader using the specified buffer.
+ * @function
+ * @param {Uint8Array|Buffer} buffer Buffer to read from
+ * @returns {Reader|BufferReader} A {@link BufferReader} if `buffer` is a Buffer, otherwise a {@link Reader}
+ * @throws {Error} If `buffer` is not a valid buffer
+ */
+Reader.create = util.Buffer
+    ? function create_buffer_setup(buffer) {
+        return (Reader.create = function create_buffer(buffer) {
+            return util.Buffer.isBuffer(buffer)
+                ? new BufferReader(buffer)
+                /* istanbul ignore next */
+                : create_array(buffer);
+        })(buffer);
+    }
+    /* istanbul ignore next */
+    : create_array;
+
+Reader.prototype._slice = util.Array.prototype.subarray || /* istanbul ignore next */ util.Array.prototype.slice;
+
+/**
+ * Reads a varint as an unsigned 32 bit value.
+ * @function
+ * @returns {number} Value read
+ */
+Reader.prototype.uint32 = (function read_uint32_setup() {
+    var value = 4294967295; // optimizer type-hint, tends to deopt otherwise (?!)
+    return function read_uint32() {
+        value = (         this.buf[this.pos] & 127       ) >>> 0; if (this.buf[this.pos++] < 128) return value;
+        value = (value | (this.buf[this.pos] & 127) <<  7) >>> 0; if (this.buf[this.pos++] < 128) return value;
+        value = (value | (this.buf[this.pos] & 127) << 14) >>> 0; if (this.buf[this.pos++] < 128) return value;
+        value = (value | (this.buf[this.pos] & 127) << 21) >>> 0; if (this.buf[this.pos++] < 128) return value;
+        value = (value | (this.buf[this.pos] &  15) << 28) >>> 0; if (this.buf[this.pos++] < 128) return value;
+
+        /* istanbul ignore if */
+        if ((this.pos += 5) > this.len) {
+            this.pos = this.len;
+            throw indexOutOfRange(this, 10);
+        }
+        return value;
+    };
+})();
+
+/**
+ * Reads a varint as a signed 32 bit value.
+ * @returns {number} Value read
+ */
+Reader.prototype.int32 = function read_int32() {
+    return this.uint32() | 0;
+};
+
+/**
+ * Reads a zig-zag encoded varint as a signed 32 bit value.
+ * @returns {number} Value read
+ */
+Reader.prototype.sint32 = function read_sint32() {
+    var value = this.uint32();
+    return value >>> 1 ^ -(value & 1) | 0;
+};
+
+/* eslint-disable no-invalid-this */
+
+function readLongVarint() {
+    // tends to deopt with local vars for octet etc.
+    var bits = new LongBits(0, 0);
+    var i = 0;
+    if (this.len - this.pos > 4) { // fast route (lo)
+        for (; i < 4; ++i) {
+            // 1st..4th
+            bits.lo = (bits.lo | (this.buf[this.pos] & 127) << i * 7) >>> 0;
+            if (this.buf[this.pos++] < 128)
+                return bits;
+        }
+        // 5th
+        bits.lo = (bits.lo | (this.buf[this.pos] & 127) << 28) >>> 0;
+        bits.hi = (bits.hi | (this.buf[this.pos] & 127) >>  4) >>> 0;
+        if (this.buf[this.pos++] < 128)
+            return bits;
+        i = 0;
+    } else {
+        for (; i < 3; ++i) {
+            /* istanbul ignore if */
+            if (this.pos >= this.len)
+                throw indexOutOfRange(this);
+            // 1st..3th
+            bits.lo = (bits.lo | (this.buf[this.pos] & 127) << i * 7) >>> 0;
+            if (this.buf[this.pos++] < 128)
+                return bits;
+        }
+        // 4th
+        bits.lo = (bits.lo | (this.buf[this.pos++] & 127) << i * 7) >>> 0;
+        return bits;
+    }
+    if (this.len - this.pos > 4) { // fast route (hi)
+        for (; i < 5; ++i) {
+            // 6th..10th
+            bits.hi = (bits.hi | (this.buf[this.pos] & 127) << i * 7 + 3) >>> 0;
+            if (this.buf[this.pos++] < 128)
+                return bits;
+        }
+    } else {
+        for (; i < 5; ++i) {
+            /* istanbul ignore if */
+            if (this.pos >= this.len)
+                throw indexOutOfRange(this);
+            // 6th..10th
+            bits.hi = (bits.hi | (this.buf[this.pos] & 127) << i * 7 + 3) >>> 0;
+            if (this.buf[this.pos++] < 128)
+                return bits;
+        }
+    }
+    /* istanbul ignore next */
+    throw Error("invalid varint encoding");
+}
+
+/* eslint-enable no-invalid-this */
+
+/**
+ * Reads a varint as a signed 64 bit value.
+ * @name Reader#int64
+ * @function
+ * @returns {Long} Value read
+ */
+
+/**
+ * Reads a varint as an unsigned 64 bit value.
+ * @name Reader#uint64
+ * @function
+ * @returns {Long} Value read
+ */
+
+/**
+ * Reads a zig-zag encoded varint as a signed 64 bit value.
+ * @name Reader#sint64
+ * @function
+ * @returns {Long} Value read
+ */
+
+/**
+ * Reads a varint as a boolean.
+ * @returns {boolean} Value read
+ */
+Reader.prototype.bool = function read_bool() {
+    return this.uint32() !== 0;
+};
+
+function readFixed32_end(buf, end) { // note that this uses `end`, not `pos`
+    return (buf[end - 4]
+          | buf[end - 3] << 8
+          | buf[end - 2] << 16
+          | buf[end - 1] << 24) >>> 0;
+}
+
+/**
+ * Reads fixed 32 bits as an unsigned 32 bit integer.
+ * @returns {number} Value read
+ */
+Reader.prototype.fixed32 = function read_fixed32() {
+
+    /* istanbul ignore if */
+    if (this.pos + 4 > this.len)
+        throw indexOutOfRange(this, 4);
+
+    return readFixed32_end(this.buf, this.pos += 4);
+};
+
+/**
+ * Reads fixed 32 bits as a signed 32 bit integer.
+ * @returns {number} Value read
+ */
+Reader.prototype.sfixed32 = function read_sfixed32() {
+
+    /* istanbul ignore if */
+    if (this.pos + 4 > this.len)
+        throw indexOutOfRange(this, 4);
+
+    return readFixed32_end(this.buf, this.pos += 4) | 0;
+};
+
+/* eslint-disable no-invalid-this */
+
+function readFixed64(/* this: Reader */) {
+
+    /* istanbul ignore if */
+    if (this.pos + 8 > this.len)
+        throw indexOutOfRange(this, 8);
+
+    return new LongBits(readFixed32_end(this.buf, this.pos += 4), readFixed32_end(this.buf, this.pos += 4));
+}
+
+/* eslint-enable no-invalid-this */
+
+/**
+ * Reads fixed 64 bits.
+ * @name Reader#fixed64
+ * @function
+ * @returns {Long} Value read
+ */
+
+/**
+ * Reads zig-zag encoded fixed 64 bits.
+ * @name Reader#sfixed64
+ * @function
+ * @returns {Long} Value read
+ */
+
+/**
+ * Reads a float (32 bit) as a number.
+ * @function
+ * @returns {number} Value read
+ */
+Reader.prototype.float = function read_float() {
+
+    /* istanbul ignore if */
+    if (this.pos + 4 > this.len)
+        throw indexOutOfRange(this, 4);
+
+    var value = util.float.readFloatLE(this.buf, this.pos);
+    this.pos += 4;
+    return value;
+};
+
+/**
+ * Reads a double (64 bit float) as a number.
+ * @function
+ * @returns {number} Value read
+ */
+Reader.prototype.double = function read_double() {
+
+    /* istanbul ignore if */
+    if (this.pos + 8 > this.len)
+        throw indexOutOfRange(this, 4);
+
+    var value = util.float.readDoubleLE(this.buf, this.pos);
+    this.pos += 8;
+    return value;
+};
+
+/**
+ * Reads a sequence of bytes preceeded by its length as a varint.
+ * @returns {Uint8Array} Value read
+ */
+Reader.prototype.bytes = function read_bytes() {
+    var length = this.uint32(),
+        start  = this.pos,
+        end    = this.pos + length;
+
+    /* istanbul ignore if */
+    if (end > this.len)
+        throw indexOutOfRange(this, length);
+
+    this.pos += length;
+    if (Array.isArray(this.buf)) // plain array
+        return this.buf.slice(start, end);
+    return start === end // fix for IE 10/Win8 and others' subarray returning array of size 1
+        ? new this.buf.constructor(0)
+        : this._slice.call(this.buf, start, end);
+};
+
+/**
+ * Reads a string preceeded by its byte length as a varint.
+ * @returns {string} Value read
+ */
+Reader.prototype.string = function read_string() {
+    var bytes = this.bytes();
+    return utf8.read(bytes, 0, bytes.length);
+};
+
+/**
+ * Skips the specified number of bytes if specified, otherwise skips a varint.
+ * @param {number} [length] Length if known, otherwise a varint is assumed
+ * @returns {Reader} `this`
+ */
+Reader.prototype.skip = function skip(length) {
+    if (typeof length === "number") {
+        /* istanbul ignore if */
+        if (this.pos + length > this.len)
+            throw indexOutOfRange(this, length);
+        this.pos += length;
+    } else {
+        do {
+            /* istanbul ignore if */
+            if (this.pos >= this.len)
+                throw indexOutOfRange(this);
+        } while (this.buf[this.pos++] & 128);
+    }
+    return this;
+};
+
+/**
+ * Skips the next element of the specified wire type.
+ * @param {number} wireType Wire type received
+ * @returns {Reader} `this`
+ */
+Reader.prototype.skipType = function(wireType) {
+    switch (wireType) {
+        case 0:
+            this.skip();
+            break;
+        case 1:
+            this.skip(8);
+            break;
+        case 2:
+            this.skip(this.uint32());
+            break;
+        case 3:
+            do { // eslint-disable-line no-constant-condition
+                if ((wireType = this.uint32() & 7) === 4)
+                    break;
+                this.skipType(wireType);
+            } while (true);
+            break;
+        case 5:
+            this.skip(4);
+            break;
+
+        /* istanbul ignore next */
+        default:
+            throw Error("invalid wire type " + wireType + " at offset " + this.pos);
+    }
+    return this;
+};
+
+Reader._configure = function(BufferReader_) {
+    BufferReader = BufferReader_;
+
+    var fn = util.Long ? "toLong" : /* istanbul ignore next */ "toNumber";
+    util.merge(Reader.prototype, {
+
+        int64: function read_int64() {
+            return readLongVarint.call(this)[fn](false);
+        },
+
+        uint64: function read_uint64() {
+            return readLongVarint.call(this)[fn](true);
+        },
+
+        sint64: function read_sint64() {
+            return readLongVarint.call(this).zzDecode()[fn](false);
+        },
+
+        fixed64: function read_fixed64() {
+            return readFixed64.call(this)[fn](true);
+        },
+
+        sfixed64: function read_sfixed64() {
+            return readFixed64.call(this)[fn](false);
+        }
+
+    });
+};
+
+
+/***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = OneOf;
+
+// extends ReflectionObject
+var ReflectionObject = __webpack_require__(4);
+((OneOf.prototype = Object.create(ReflectionObject.prototype)).constructor = OneOf).className = "OneOf";
+
+var Field = __webpack_require__(5),
+    util  = __webpack_require__(0);
+
+/**
+ * Constructs a new oneof instance.
+ * @classdesc Reflected oneof.
+ * @extends ReflectionObject
+ * @constructor
+ * @param {string} name Oneof name
+ * @param {string[]|Object.<string,*>} [fieldNames] Field names
+ * @param {Object.<string,*>} [options] Declared options
+ * @param {string} [comment] Comment associated with this field
+ */
+function OneOf(name, fieldNames, options, comment) {
+    if (!Array.isArray(fieldNames)) {
+        options = fieldNames;
+        fieldNames = undefined;
+    }
+    ReflectionObject.call(this, name, options);
+
+    /* istanbul ignore if */
+    if (!(fieldNames === undefined || Array.isArray(fieldNames)))
+        throw TypeError("fieldNames must be an Array");
+
+    /**
+     * Field names that belong to this oneof.
+     * @type {string[]}
+     */
+    this.oneof = fieldNames || []; // toJSON, marker
+
+    /**
+     * Fields that belong to this oneof as an array for iteration.
+     * @type {Field[]}
+     * @readonly
+     */
+    this.fieldsArray = []; // declared readonly for conformance, possibly not yet added to parent
+
+    /**
+     * Comment for this field.
+     * @type {string|null}
+     */
+    this.comment = comment;
+}
+
+/**
+ * Oneof descriptor.
+ * @interface IOneOf
+ * @property {Array.<string>} oneof Oneof field names
+ * @property {Object.<string,*>} [options] Oneof options
+ */
+
+/**
+ * Constructs a oneof from a oneof descriptor.
+ * @param {string} name Oneof name
+ * @param {IOneOf} json Oneof descriptor
+ * @returns {OneOf} Created oneof
+ * @throws {TypeError} If arguments are invalid
+ */
+OneOf.fromJSON = function fromJSON(name, json) {
+    return new OneOf(name, json.oneof, json.options, json.comment);
+};
+
+/**
+ * Converts this oneof to a oneof descriptor.
+ * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
+ * @returns {IOneOf} Oneof descriptor
+ */
+OneOf.prototype.toJSON = function toJSON(toJSONOptions) {
+    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
+    return util.toObject([
+        "options" , this.options,
+        "oneof"   , this.oneof,
+        "comment" , keepComments ? this.comment : undefined
+    ]);
+};
+
+/**
+ * Adds the fields of the specified oneof to the parent if not already done so.
+ * @param {OneOf} oneof The oneof
+ * @returns {undefined}
+ * @inner
+ * @ignore
+ */
+function addFieldsToParent(oneof) {
+    if (oneof.parent)
+        for (var i = 0; i < oneof.fieldsArray.length; ++i)
+            if (!oneof.fieldsArray[i].parent)
+                oneof.parent.add(oneof.fieldsArray[i]);
+}
+
+/**
+ * Adds a field to this oneof and removes it from its current parent, if any.
+ * @param {Field} field Field to add
+ * @returns {OneOf} `this`
+ */
+OneOf.prototype.add = function add(field) {
+
+    /* istanbul ignore if */
+    if (!(field instanceof Field))
+        throw TypeError("field must be a Field");
+
+    if (field.parent && field.parent !== this.parent)
+        field.parent.remove(field);
+    this.oneof.push(field.name);
+    this.fieldsArray.push(field);
+    field.partOf = this; // field.parent remains null
+    addFieldsToParent(this);
+    return this;
+};
+
+/**
+ * Removes a field from this oneof and puts it back to the oneof's parent.
+ * @param {Field} field Field to remove
+ * @returns {OneOf} `this`
+ */
+OneOf.prototype.remove = function remove(field) {
+
+    /* istanbul ignore if */
+    if (!(field instanceof Field))
+        throw TypeError("field must be a Field");
+
+    var index = this.fieldsArray.indexOf(field);
+
+    /* istanbul ignore if */
+    if (index < 0)
+        throw Error(field + " is not a member of " + this);
+
+    this.fieldsArray.splice(index, 1);
+    index = this.oneof.indexOf(field.name);
+
+    /* istanbul ignore else */
+    if (index > -1) // theoretical
+        this.oneof.splice(index, 1);
+
+    field.partOf = null;
+    return this;
+};
+
+/**
+ * @override
+ */
+OneOf.prototype.onAdd = function onAdd(parent) {
+    ReflectionObject.prototype.onAdd.call(this, parent);
+    var self = this;
+    // Collect present fields
+    for (var i = 0; i < this.oneof.length; ++i) {
+        var field = parent.get(this.oneof[i]);
+        if (field && !field.partOf) {
+            field.partOf = self;
+            self.fieldsArray.push(field);
+        }
+    }
+    // Add not yet present fields
+    addFieldsToParent(this);
+};
+
+/**
+ * @override
+ */
+OneOf.prototype.onRemove = function onRemove(parent) {
+    for (var i = 0, field; i < this.fieldsArray.length; ++i)
+        if ((field = this.fieldsArray[i]).parent)
+            field.parent.remove(field);
+    ReflectionObject.prototype.onRemove.call(this, parent);
+};
+
+/**
+ * Decorator function as returned by {@link OneOf.d} (TypeScript).
+ * @typedef OneOfDecorator
+ * @type {function}
+ * @param {Object} prototype Target prototype
+ * @param {string} oneofName OneOf name
+ * @returns {undefined}
+ */
+
+/**
+ * OneOf decorator (TypeScript).
+ * @function
+ * @param {...string} fieldNames Field names
+ * @returns {OneOfDecorator} Decorator function
+ * @template T extends string
+ */
+OneOf.d = function decorateOneOf() {
+    var fieldNames = new Array(arguments.length),
+        index = 0;
+    while (index < arguments.length)
+        fieldNames[index] = arguments[index++];
+    return function oneOfDecorator(prototype, oneofName) {
+        util.decorateType(prototype.constructor)
+            .add(new OneOf(oneofName, fieldNames));
+        Object.defineProperty(prototype, oneofName, {
+            get: util.oneOfGetter(fieldNames),
+            set: util.oneOfSetter(fieldNames)
+        });
+    };
+};
+
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+module.exports = Message;
+
+var util = __webpack_require__(2);
+
+/**
+ * Constructs a new message instance.
+ * @classdesc Abstract runtime message.
+ * @constructor
+ * @param {Properties<T>} [properties] Properties to set
+ * @template T extends object
+ */
+function Message(properties) {
+    // not used internally
+    if (properties)
+        for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+            this[keys[i]] = properties[keys[i]];
+}
+
+/**
+ * Reference to the reflected type.
+ * @name Message.$type
+ * @type {Type}
+ * @readonly
+ */
+
+/**
+ * Reference to the reflected type.
+ * @name Message#$type
+ * @type {Type}
+ * @readonly
+ */
+
+/*eslint-disable valid-jsdoc*/
+
+/**
+ * Creates a new message of this type using the specified properties.
+ * @param {Object.<string,*>} [properties] Properties to set
+ * @returns {Message<T>} Message instance
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.create = function create(properties) {
+    return this.$type.create(properties);
+};
+
+/**
+ * Encodes a message of this type.
+ * @param {T|Object.<string,*>} message Message to encode
+ * @param {Writer} [writer] Writer to use
+ * @returns {Writer} Writer
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.encode = function encode(message, writer) {
+    return this.$type.encode(message, writer);
+};
+
+/**
+ * Encodes a message of this type preceeded by its length as a varint.
+ * @param {T|Object.<string,*>} message Message to encode
+ * @param {Writer} [writer] Writer to use
+ * @returns {Writer} Writer
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.encodeDelimited = function encodeDelimited(message, writer) {
+    return this.$type.encodeDelimited(message, writer);
+};
+
+/**
+ * Decodes a message of this type.
+ * @name Message.decode
+ * @function
+ * @param {Reader|Uint8Array} reader Reader or buffer to decode
+ * @returns {T} Decoded message
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.decode = function decode(reader) {
+    return this.$type.decode(reader);
+};
+
+/**
+ * Decodes a message of this type preceeded by its length as a varint.
+ * @name Message.decodeDelimited
+ * @function
+ * @param {Reader|Uint8Array} reader Reader or buffer to decode
+ * @returns {T} Decoded message
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.decodeDelimited = function decodeDelimited(reader) {
+    return this.$type.decodeDelimited(reader);
+};
+
+/**
+ * Verifies a message of this type.
+ * @name Message.verify
+ * @function
+ * @param {Object.<string,*>} message Plain object to verify
+ * @returns {string|null} `null` if valid, otherwise the reason why it is not
+ */
+Message.verify = function verify(message) {
+    return this.$type.verify(message);
+};
+
+/**
+ * Creates a new message of this type from a plain object. Also converts values to their respective internal types.
+ * @param {Object.<string,*>} object Plain object
+ * @returns {T} Message instance
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.fromObject = function fromObject(object) {
+    return this.$type.fromObject(object);
+};
+
+/**
+ * Creates a plain object from a message of this type. Also converts values to other types if specified.
+ * @param {T} message Message instance
+ * @param {IConversionOptions} [options] Conversion options
+ * @returns {Object.<string,*>} Plain object
+ * @template T extends Message<T>
+ * @this Constructor<T>
+ */
+Message.toObject = function toObject(message, options) {
+    return this.$type.toObject(message, options);
+};
+
+/**
+ * Converts this message to JSON.
+ * @returns {Object.<string,*>} JSON object
+ */
+Message.prototype.toJSON = function toJSON() {
+    return this.$type.toObject(this, util.toJSONOptions);
+};
+
+/*eslint-enable valid-jsdoc*/
+
+/***/ }),
+/* 15 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3771,9 +4908,9 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-var _json = __webpack_require__(11);
+var _json = __webpack_require__(16);
 
-var _utils = __webpack_require__(6);
+var _utils = __webpack_require__(8);
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
@@ -3781,9 +4918,9 @@ function _possibleConstructorReturn(self, call) { if (!self) { throw new Referen
 
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
-var EventEmitter = __webpack_require__(7);
-var Promise = __webpack_require__(8);
-var Subscription = __webpack_require__(14);
+var EventEmitter = __webpack_require__(9);
+var Promise = __webpack_require__(10);
+var Subscription = __webpack_require__(18);
 
 var _errorTimeout = 'timeout';
 
@@ -3795,8 +4932,8 @@ var Centrifuge = exports.Centrifuge = function (_EventEmitter) {
 
     var _this = _possibleConstructorReturn(this, (Centrifuge.__proto__ || Object.getPrototypeOf(Centrifuge)).call(this));
 
-    _this._methodType = _json.methodType;
-    _this._messageType = _json.messageType;
+    _this._methodType = _json.methodTypeJSON;
+    _this._messageType = _json.messageTypeJSON;
     _this._url = url;
     _this._sockjs = null;
     _this._isSockjs = false;
@@ -5032,7 +6169,105 @@ var Centrifuge = exports.Centrifuge = function (_EventEmitter) {
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(3)))
 
 /***/ }),
-/* 13 */
+/* 16 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var methodTypeJSON = exports.methodTypeJSON = {
+  CONNECT: 'connect',
+  REFRESH: 'refresh',
+  SUBSCRIBE: 'subscribe',
+  UNSUBSCRIBE: 'unsubscribe',
+  PUBLISH: 'publish',
+  PRESENCE: 'presence',
+  PRESENCE_STATS: 'presence_stats',
+  HISTORY: 'history',
+  PING: 'ping',
+  RPC: 'rpc',
+  MESSAGE: 'message'
+};
+
+var messageTypeJSON = exports.messageTypeJSON = {
+  PUBLICATION: 0,
+  JOIN: 1,
+  LEAVE: 2,
+  UNSUB: 3
+};
+
+var JsonEncoder = exports.JsonEncoder = function () {
+  function JsonEncoder() {
+    _classCallCheck(this, JsonEncoder);
+  }
+
+  _createClass(JsonEncoder, [{
+    key: 'encodeCommands',
+    value: function encodeCommands(commands) {
+      var encodedCommands = [];
+      for (var i in commands) {
+        if (commands.hasOwnProperty(i)) {
+          encodedCommands.push(JSON.stringify(commands[i]));
+        }
+      }
+      return encodedCommands.join('\n');
+    }
+  }]);
+
+  return JsonEncoder;
+}();
+
+var JsonDecoder = exports.JsonDecoder = function () {
+  function JsonDecoder() {
+    _classCallCheck(this, JsonDecoder);
+  }
+
+  _createClass(JsonDecoder, [{
+    key: 'decodeReplies',
+    value: function decodeReplies(data) {
+      var replies = [];
+      var encodedReplies = data.split('\n');
+      for (var i in encodedReplies) {
+        if (encodedReplies.hasOwnProperty(i)) {
+          if (!encodedReplies[i]) {
+            continue;
+          }
+          var reply = JSON.parse(encodedReplies[i]);
+          replies.push(reply);
+        }
+      }
+      return replies;
+    }
+  }, {
+    key: 'decodeCommandResult',
+    value: function decodeCommandResult(methodType, data) {
+      return data;
+    }
+  }, {
+    key: 'decodeMessage',
+    value: function decodeMessage(data) {
+      return data;
+    }
+  }, {
+    key: 'decodeMessageData',
+    value: function decodeMessageData(messageType, data) {
+      return data;
+    }
+  }]);
+
+  return JsonDecoder;
+}();
+
+/***/ }),
+/* 17 */
 /***/ (function(module, exports) {
 
 // shim for using process in browser
@@ -5222,7 +6457,7 @@ process.umask = function() { return 0; };
 
 
 /***/ }),
-/* 14 */
+/* 18 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -5234,7 +6469,7 @@ Object.defineProperty(exports, "__esModule", {
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-var _utils = __webpack_require__(6);
+var _utils = __webpack_require__(8);
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
@@ -5242,8 +6477,8 @@ function _possibleConstructorReturn(self, call) { if (!self) { throw new Referen
 
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
-var EventEmitter = __webpack_require__(7);
-var Promise = __webpack_require__(8);
+var EventEmitter = __webpack_require__(9);
+var Promise = __webpack_require__(10);
 
 var _STATE_NEW = 0;
 var _STATE_SUBSCRIBING = 1;
@@ -5524,1241 +6759,6 @@ exports.default = Subscription;
 module.exports = exports['default'];
 
 /***/ }),
-/* 15 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Writer;
-
-var util      = __webpack_require__(2);
-
-var BufferWriter; // cyclic
-
-var LongBits  = util.LongBits,
-    base64    = util.base64,
-    utf8      = util.utf8;
-
-/**
- * Constructs a new writer operation instance.
- * @classdesc Scheduled writer operation.
- * @constructor
- * @param {function(*, Uint8Array, number)} fn Function to call
- * @param {number} len Value byte length
- * @param {*} val Value to write
- * @ignore
- */
-function Op(fn, len, val) {
-
-    /**
-     * Function to call.
-     * @type {function(Uint8Array, number, *)}
-     */
-    this.fn = fn;
-
-    /**
-     * Value byte length.
-     * @type {number}
-     */
-    this.len = len;
-
-    /**
-     * Next operation.
-     * @type {Writer.Op|undefined}
-     */
-    this.next = undefined;
-
-    /**
-     * Value to write.
-     * @type {*}
-     */
-    this.val = val; // type varies
-}
-
-/* istanbul ignore next */
-function noop() {} // eslint-disable-line no-empty-function
-
-/**
- * Constructs a new writer state instance.
- * @classdesc Copied writer state.
- * @memberof Writer
- * @constructor
- * @param {Writer} writer Writer to copy state from
- * @ignore
- */
-function State(writer) {
-
-    /**
-     * Current head.
-     * @type {Writer.Op}
-     */
-    this.head = writer.head;
-
-    /**
-     * Current tail.
-     * @type {Writer.Op}
-     */
-    this.tail = writer.tail;
-
-    /**
-     * Current buffer length.
-     * @type {number}
-     */
-    this.len = writer.len;
-
-    /**
-     * Next state.
-     * @type {State|null}
-     */
-    this.next = writer.states;
-}
-
-/**
- * Constructs a new writer instance.
- * @classdesc Wire format writer using `Uint8Array` if available, otherwise `Array`.
- * @constructor
- */
-function Writer() {
-
-    /**
-     * Current length.
-     * @type {number}
-     */
-    this.len = 0;
-
-    /**
-     * Operations head.
-     * @type {Object}
-     */
-    this.head = new Op(noop, 0, 0);
-
-    /**
-     * Operations tail
-     * @type {Object}
-     */
-    this.tail = this.head;
-
-    /**
-     * Linked forked states.
-     * @type {Object|null}
-     */
-    this.states = null;
-
-    // When a value is written, the writer calculates its byte length and puts it into a linked
-    // list of operations to perform when finish() is called. This both allows us to allocate
-    // buffers of the exact required size and reduces the amount of work we have to do compared
-    // to first calculating over objects and then encoding over objects. In our case, the encoding
-    // part is just a linked list walk calling operations with already prepared values.
-}
-
-/**
- * Creates a new writer.
- * @function
- * @returns {BufferWriter|Writer} A {@link BufferWriter} when Buffers are supported, otherwise a {@link Writer}
- */
-Writer.create = util.Buffer
-    ? function create_buffer_setup() {
-        return (Writer.create = function create_buffer() {
-            return new BufferWriter();
-        })();
-    }
-    /* istanbul ignore next */
-    : function create_array() {
-        return new Writer();
-    };
-
-/**
- * Allocates a buffer of the specified size.
- * @param {number} size Buffer size
- * @returns {Uint8Array} Buffer
- */
-Writer.alloc = function alloc(size) {
-    return new util.Array(size);
-};
-
-// Use Uint8Array buffer pool in the browser, just like node does with buffers
-/* istanbul ignore else */
-if (util.Array !== Array)
-    Writer.alloc = util.pool(Writer.alloc, util.Array.prototype.subarray);
-
-/**
- * Pushes a new operation to the queue.
- * @param {function(Uint8Array, number, *)} fn Function to call
- * @param {number} len Value byte length
- * @param {number} val Value to write
- * @returns {Writer} `this`
- * @private
- */
-Writer.prototype._push = function push(fn, len, val) {
-    this.tail = this.tail.next = new Op(fn, len, val);
-    this.len += len;
-    return this;
-};
-
-function writeByte(val, buf, pos) {
-    buf[pos] = val & 255;
-}
-
-function writeVarint32(val, buf, pos) {
-    while (val > 127) {
-        buf[pos++] = val & 127 | 128;
-        val >>>= 7;
-    }
-    buf[pos] = val;
-}
-
-/**
- * Constructs a new varint writer operation instance.
- * @classdesc Scheduled varint writer operation.
- * @extends Op
- * @constructor
- * @param {number} len Value byte length
- * @param {number} val Value to write
- * @ignore
- */
-function VarintOp(len, val) {
-    this.len = len;
-    this.next = undefined;
-    this.val = val;
-}
-
-VarintOp.prototype = Object.create(Op.prototype);
-VarintOp.prototype.fn = writeVarint32;
-
-/**
- * Writes an unsigned 32 bit value as a varint.
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.uint32 = function write_uint32(value) {
-    // here, the call to this.push has been inlined and a varint specific Op subclass is used.
-    // uint32 is by far the most frequently used operation and benefits significantly from this.
-    this.len += (this.tail = this.tail.next = new VarintOp(
-        (value = value >>> 0)
-                < 128       ? 1
-        : value < 16384     ? 2
-        : value < 2097152   ? 3
-        : value < 268435456 ? 4
-        :                     5,
-    value)).len;
-    return this;
-};
-
-/**
- * Writes a signed 32 bit value as a varint.
- * @function
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.int32 = function write_int32(value) {
-    return value < 0
-        ? this._push(writeVarint64, 10, LongBits.fromNumber(value)) // 10 bytes per spec
-        : this.uint32(value);
-};
-
-/**
- * Writes a 32 bit value as a varint, zig-zag encoded.
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.sint32 = function write_sint32(value) {
-    return this.uint32((value << 1 ^ value >> 31) >>> 0);
-};
-
-function writeVarint64(val, buf, pos) {
-    while (val.hi) {
-        buf[pos++] = val.lo & 127 | 128;
-        val.lo = (val.lo >>> 7 | val.hi << 25) >>> 0;
-        val.hi >>>= 7;
-    }
-    while (val.lo > 127) {
-        buf[pos++] = val.lo & 127 | 128;
-        val.lo = val.lo >>> 7;
-    }
-    buf[pos++] = val.lo;
-}
-
-/**
- * Writes an unsigned 64 bit value as a varint.
- * @param {Long|number|string} value Value to write
- * @returns {Writer} `this`
- * @throws {TypeError} If `value` is a string and no long library is present.
- */
-Writer.prototype.uint64 = function write_uint64(value) {
-    var bits = LongBits.from(value);
-    return this._push(writeVarint64, bits.length(), bits);
-};
-
-/**
- * Writes a signed 64 bit value as a varint.
- * @function
- * @param {Long|number|string} value Value to write
- * @returns {Writer} `this`
- * @throws {TypeError} If `value` is a string and no long library is present.
- */
-Writer.prototype.int64 = Writer.prototype.uint64;
-
-/**
- * Writes a signed 64 bit value as a varint, zig-zag encoded.
- * @param {Long|number|string} value Value to write
- * @returns {Writer} `this`
- * @throws {TypeError} If `value` is a string and no long library is present.
- */
-Writer.prototype.sint64 = function write_sint64(value) {
-    var bits = LongBits.from(value).zzEncode();
-    return this._push(writeVarint64, bits.length(), bits);
-};
-
-/**
- * Writes a boolish value as a varint.
- * @param {boolean} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.bool = function write_bool(value) {
-    return this._push(writeByte, 1, value ? 1 : 0);
-};
-
-function writeFixed32(val, buf, pos) {
-    buf[pos    ] =  val         & 255;
-    buf[pos + 1] =  val >>> 8   & 255;
-    buf[pos + 2] =  val >>> 16  & 255;
-    buf[pos + 3] =  val >>> 24;
-}
-
-/**
- * Writes an unsigned 32 bit value as fixed 32 bits.
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.fixed32 = function write_fixed32(value) {
-    return this._push(writeFixed32, 4, value >>> 0);
-};
-
-/**
- * Writes a signed 32 bit value as fixed 32 bits.
- * @function
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.sfixed32 = Writer.prototype.fixed32;
-
-/**
- * Writes an unsigned 64 bit value as fixed 64 bits.
- * @param {Long|number|string} value Value to write
- * @returns {Writer} `this`
- * @throws {TypeError} If `value` is a string and no long library is present.
- */
-Writer.prototype.fixed64 = function write_fixed64(value) {
-    var bits = LongBits.from(value);
-    return this._push(writeFixed32, 4, bits.lo)._push(writeFixed32, 4, bits.hi);
-};
-
-/**
- * Writes a signed 64 bit value as fixed 64 bits.
- * @function
- * @param {Long|number|string} value Value to write
- * @returns {Writer} `this`
- * @throws {TypeError} If `value` is a string and no long library is present.
- */
-Writer.prototype.sfixed64 = Writer.prototype.fixed64;
-
-/**
- * Writes a float (32 bit).
- * @function
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.float = function write_float(value) {
-    return this._push(util.float.writeFloatLE, 4, value);
-};
-
-/**
- * Writes a double (64 bit float).
- * @function
- * @param {number} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.double = function write_double(value) {
-    return this._push(util.float.writeDoubleLE, 8, value);
-};
-
-var writeBytes = util.Array.prototype.set
-    ? function writeBytes_set(val, buf, pos) {
-        buf.set(val, pos); // also works for plain array values
-    }
-    /* istanbul ignore next */
-    : function writeBytes_for(val, buf, pos) {
-        for (var i = 0; i < val.length; ++i)
-            buf[pos + i] = val[i];
-    };
-
-/**
- * Writes a sequence of bytes.
- * @param {Uint8Array|string} value Buffer or base64 encoded string to write
- * @returns {Writer} `this`
- */
-Writer.prototype.bytes = function write_bytes(value) {
-    var len = value.length >>> 0;
-    if (!len)
-        return this._push(writeByte, 1, 0);
-    if (util.isString(value)) {
-        var buf = Writer.alloc(len = base64.length(value));
-        base64.decode(value, buf, 0);
-        value = buf;
-    }
-    return this.uint32(len)._push(writeBytes, len, value);
-};
-
-/**
- * Writes a string.
- * @param {string} value Value to write
- * @returns {Writer} `this`
- */
-Writer.prototype.string = function write_string(value) {
-    var len = utf8.length(value);
-    return len
-        ? this.uint32(len)._push(utf8.write, len, value)
-        : this._push(writeByte, 1, 0);
-};
-
-/**
- * Forks this writer's state by pushing it to a stack.
- * Calling {@link Writer#reset|reset} or {@link Writer#ldelim|ldelim} resets the writer to the previous state.
- * @returns {Writer} `this`
- */
-Writer.prototype.fork = function fork() {
-    this.states = new State(this);
-    this.head = this.tail = new Op(noop, 0, 0);
-    this.len = 0;
-    return this;
-};
-
-/**
- * Resets this instance to the last state.
- * @returns {Writer} `this`
- */
-Writer.prototype.reset = function reset() {
-    if (this.states) {
-        this.head   = this.states.head;
-        this.tail   = this.states.tail;
-        this.len    = this.states.len;
-        this.states = this.states.next;
-    } else {
-        this.head = this.tail = new Op(noop, 0, 0);
-        this.len  = 0;
-    }
-    return this;
-};
-
-/**
- * Resets to the last state and appends the fork state's current write length as a varint followed by its operations.
- * @returns {Writer} `this`
- */
-Writer.prototype.ldelim = function ldelim() {
-    var head = this.head,
-        tail = this.tail,
-        len  = this.len;
-    this.reset().uint32(len);
-    if (len) {
-        this.tail.next = head.next; // skip noop
-        this.tail = tail;
-        this.len += len;
-    }
-    return this;
-};
-
-/**
- * Finishes the write operation.
- * @returns {Uint8Array} Finished buffer
- */
-Writer.prototype.finish = function finish() {
-    var head = this.head.next, // skip noop
-        buf  = this.constructor.alloc(this.len),
-        pos  = 0;
-    while (head) {
-        head.fn(head.val, buf, pos);
-        pos += head.len;
-        head = head.next;
-    }
-    // this.head = this.tail = null;
-    return buf;
-};
-
-Writer._configure = function(BufferWriter_) {
-    BufferWriter = BufferWriter_;
-};
-
-
-/***/ }),
-/* 16 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Reader;
-
-var util      = __webpack_require__(2);
-
-var BufferReader; // cyclic
-
-var LongBits  = util.LongBits,
-    utf8      = util.utf8;
-
-/* istanbul ignore next */
-function indexOutOfRange(reader, writeLength) {
-    return RangeError("index out of range: " + reader.pos + " + " + (writeLength || 1) + " > " + reader.len);
-}
-
-/**
- * Constructs a new reader instance using the specified buffer.
- * @classdesc Wire format reader using `Uint8Array` if available, otherwise `Array`.
- * @constructor
- * @param {Uint8Array} buffer Buffer to read from
- */
-function Reader(buffer) {
-
-    /**
-     * Read buffer.
-     * @type {Uint8Array}
-     */
-    this.buf = buffer;
-
-    /**
-     * Read buffer position.
-     * @type {number}
-     */
-    this.pos = 0;
-
-    /**
-     * Read buffer length.
-     * @type {number}
-     */
-    this.len = buffer.length;
-}
-
-var create_array = typeof Uint8Array !== "undefined"
-    ? function create_typed_array(buffer) {
-        if (buffer instanceof Uint8Array || Array.isArray(buffer))
-            return new Reader(buffer);
-        throw Error("illegal buffer");
-    }
-    /* istanbul ignore next */
-    : function create_array(buffer) {
-        if (Array.isArray(buffer))
-            return new Reader(buffer);
-        throw Error("illegal buffer");
-    };
-
-/**
- * Creates a new reader using the specified buffer.
- * @function
- * @param {Uint8Array|Buffer} buffer Buffer to read from
- * @returns {Reader|BufferReader} A {@link BufferReader} if `buffer` is a Buffer, otherwise a {@link Reader}
- * @throws {Error} If `buffer` is not a valid buffer
- */
-Reader.create = util.Buffer
-    ? function create_buffer_setup(buffer) {
-        return (Reader.create = function create_buffer(buffer) {
-            return util.Buffer.isBuffer(buffer)
-                ? new BufferReader(buffer)
-                /* istanbul ignore next */
-                : create_array(buffer);
-        })(buffer);
-    }
-    /* istanbul ignore next */
-    : create_array;
-
-Reader.prototype._slice = util.Array.prototype.subarray || /* istanbul ignore next */ util.Array.prototype.slice;
-
-/**
- * Reads a varint as an unsigned 32 bit value.
- * @function
- * @returns {number} Value read
- */
-Reader.prototype.uint32 = (function read_uint32_setup() {
-    var value = 4294967295; // optimizer type-hint, tends to deopt otherwise (?!)
-    return function read_uint32() {
-        value = (         this.buf[this.pos] & 127       ) >>> 0; if (this.buf[this.pos++] < 128) return value;
-        value = (value | (this.buf[this.pos] & 127) <<  7) >>> 0; if (this.buf[this.pos++] < 128) return value;
-        value = (value | (this.buf[this.pos] & 127) << 14) >>> 0; if (this.buf[this.pos++] < 128) return value;
-        value = (value | (this.buf[this.pos] & 127) << 21) >>> 0; if (this.buf[this.pos++] < 128) return value;
-        value = (value | (this.buf[this.pos] &  15) << 28) >>> 0; if (this.buf[this.pos++] < 128) return value;
-
-        /* istanbul ignore if */
-        if ((this.pos += 5) > this.len) {
-            this.pos = this.len;
-            throw indexOutOfRange(this, 10);
-        }
-        return value;
-    };
-})();
-
-/**
- * Reads a varint as a signed 32 bit value.
- * @returns {number} Value read
- */
-Reader.prototype.int32 = function read_int32() {
-    return this.uint32() | 0;
-};
-
-/**
- * Reads a zig-zag encoded varint as a signed 32 bit value.
- * @returns {number} Value read
- */
-Reader.prototype.sint32 = function read_sint32() {
-    var value = this.uint32();
-    return value >>> 1 ^ -(value & 1) | 0;
-};
-
-/* eslint-disable no-invalid-this */
-
-function readLongVarint() {
-    // tends to deopt with local vars for octet etc.
-    var bits = new LongBits(0, 0);
-    var i = 0;
-    if (this.len - this.pos > 4) { // fast route (lo)
-        for (; i < 4; ++i) {
-            // 1st..4th
-            bits.lo = (bits.lo | (this.buf[this.pos] & 127) << i * 7) >>> 0;
-            if (this.buf[this.pos++] < 128)
-                return bits;
-        }
-        // 5th
-        bits.lo = (bits.lo | (this.buf[this.pos] & 127) << 28) >>> 0;
-        bits.hi = (bits.hi | (this.buf[this.pos] & 127) >>  4) >>> 0;
-        if (this.buf[this.pos++] < 128)
-            return bits;
-        i = 0;
-    } else {
-        for (; i < 3; ++i) {
-            /* istanbul ignore if */
-            if (this.pos >= this.len)
-                throw indexOutOfRange(this);
-            // 1st..3th
-            bits.lo = (bits.lo | (this.buf[this.pos] & 127) << i * 7) >>> 0;
-            if (this.buf[this.pos++] < 128)
-                return bits;
-        }
-        // 4th
-        bits.lo = (bits.lo | (this.buf[this.pos++] & 127) << i * 7) >>> 0;
-        return bits;
-    }
-    if (this.len - this.pos > 4) { // fast route (hi)
-        for (; i < 5; ++i) {
-            // 6th..10th
-            bits.hi = (bits.hi | (this.buf[this.pos] & 127) << i * 7 + 3) >>> 0;
-            if (this.buf[this.pos++] < 128)
-                return bits;
-        }
-    } else {
-        for (; i < 5; ++i) {
-            /* istanbul ignore if */
-            if (this.pos >= this.len)
-                throw indexOutOfRange(this);
-            // 6th..10th
-            bits.hi = (bits.hi | (this.buf[this.pos] & 127) << i * 7 + 3) >>> 0;
-            if (this.buf[this.pos++] < 128)
-                return bits;
-        }
-    }
-    /* istanbul ignore next */
-    throw Error("invalid varint encoding");
-}
-
-/* eslint-enable no-invalid-this */
-
-/**
- * Reads a varint as a signed 64 bit value.
- * @name Reader#int64
- * @function
- * @returns {Long} Value read
- */
-
-/**
- * Reads a varint as an unsigned 64 bit value.
- * @name Reader#uint64
- * @function
- * @returns {Long} Value read
- */
-
-/**
- * Reads a zig-zag encoded varint as a signed 64 bit value.
- * @name Reader#sint64
- * @function
- * @returns {Long} Value read
- */
-
-/**
- * Reads a varint as a boolean.
- * @returns {boolean} Value read
- */
-Reader.prototype.bool = function read_bool() {
-    return this.uint32() !== 0;
-};
-
-function readFixed32_end(buf, end) { // note that this uses `end`, not `pos`
-    return (buf[end - 4]
-          | buf[end - 3] << 8
-          | buf[end - 2] << 16
-          | buf[end - 1] << 24) >>> 0;
-}
-
-/**
- * Reads fixed 32 bits as an unsigned 32 bit integer.
- * @returns {number} Value read
- */
-Reader.prototype.fixed32 = function read_fixed32() {
-
-    /* istanbul ignore if */
-    if (this.pos + 4 > this.len)
-        throw indexOutOfRange(this, 4);
-
-    return readFixed32_end(this.buf, this.pos += 4);
-};
-
-/**
- * Reads fixed 32 bits as a signed 32 bit integer.
- * @returns {number} Value read
- */
-Reader.prototype.sfixed32 = function read_sfixed32() {
-
-    /* istanbul ignore if */
-    if (this.pos + 4 > this.len)
-        throw indexOutOfRange(this, 4);
-
-    return readFixed32_end(this.buf, this.pos += 4) | 0;
-};
-
-/* eslint-disable no-invalid-this */
-
-function readFixed64(/* this: Reader */) {
-
-    /* istanbul ignore if */
-    if (this.pos + 8 > this.len)
-        throw indexOutOfRange(this, 8);
-
-    return new LongBits(readFixed32_end(this.buf, this.pos += 4), readFixed32_end(this.buf, this.pos += 4));
-}
-
-/* eslint-enable no-invalid-this */
-
-/**
- * Reads fixed 64 bits.
- * @name Reader#fixed64
- * @function
- * @returns {Long} Value read
- */
-
-/**
- * Reads zig-zag encoded fixed 64 bits.
- * @name Reader#sfixed64
- * @function
- * @returns {Long} Value read
- */
-
-/**
- * Reads a float (32 bit) as a number.
- * @function
- * @returns {number} Value read
- */
-Reader.prototype.float = function read_float() {
-
-    /* istanbul ignore if */
-    if (this.pos + 4 > this.len)
-        throw indexOutOfRange(this, 4);
-
-    var value = util.float.readFloatLE(this.buf, this.pos);
-    this.pos += 4;
-    return value;
-};
-
-/**
- * Reads a double (64 bit float) as a number.
- * @function
- * @returns {number} Value read
- */
-Reader.prototype.double = function read_double() {
-
-    /* istanbul ignore if */
-    if (this.pos + 8 > this.len)
-        throw indexOutOfRange(this, 4);
-
-    var value = util.float.readDoubleLE(this.buf, this.pos);
-    this.pos += 8;
-    return value;
-};
-
-/**
- * Reads a sequence of bytes preceeded by its length as a varint.
- * @returns {Uint8Array} Value read
- */
-Reader.prototype.bytes = function read_bytes() {
-    var length = this.uint32(),
-        start  = this.pos,
-        end    = this.pos + length;
-
-    /* istanbul ignore if */
-    if (end > this.len)
-        throw indexOutOfRange(this, length);
-
-    this.pos += length;
-    if (Array.isArray(this.buf)) // plain array
-        return this.buf.slice(start, end);
-    return start === end // fix for IE 10/Win8 and others' subarray returning array of size 1
-        ? new this.buf.constructor(0)
-        : this._slice.call(this.buf, start, end);
-};
-
-/**
- * Reads a string preceeded by its byte length as a varint.
- * @returns {string} Value read
- */
-Reader.prototype.string = function read_string() {
-    var bytes = this.bytes();
-    return utf8.read(bytes, 0, bytes.length);
-};
-
-/**
- * Skips the specified number of bytes if specified, otherwise skips a varint.
- * @param {number} [length] Length if known, otherwise a varint is assumed
- * @returns {Reader} `this`
- */
-Reader.prototype.skip = function skip(length) {
-    if (typeof length === "number") {
-        /* istanbul ignore if */
-        if (this.pos + length > this.len)
-            throw indexOutOfRange(this, length);
-        this.pos += length;
-    } else {
-        do {
-            /* istanbul ignore if */
-            if (this.pos >= this.len)
-                throw indexOutOfRange(this);
-        } while (this.buf[this.pos++] & 128);
-    }
-    return this;
-};
-
-/**
- * Skips the next element of the specified wire type.
- * @param {number} wireType Wire type received
- * @returns {Reader} `this`
- */
-Reader.prototype.skipType = function(wireType) {
-    switch (wireType) {
-        case 0:
-            this.skip();
-            break;
-        case 1:
-            this.skip(8);
-            break;
-        case 2:
-            this.skip(this.uint32());
-            break;
-        case 3:
-            do { // eslint-disable-line no-constant-condition
-                if ((wireType = this.uint32() & 7) === 4)
-                    break;
-                this.skipType(wireType);
-            } while (true);
-            break;
-        case 5:
-            this.skip(4);
-            break;
-
-        /* istanbul ignore next */
-        default:
-            throw Error("invalid wire type " + wireType + " at offset " + this.pos);
-    }
-    return this;
-};
-
-Reader._configure = function(BufferReader_) {
-    BufferReader = BufferReader_;
-
-    var fn = util.Long ? "toLong" : /* istanbul ignore next */ "toNumber";
-    util.merge(Reader.prototype, {
-
-        int64: function read_int64() {
-            return readLongVarint.call(this)[fn](false);
-        },
-
-        uint64: function read_uint64() {
-            return readLongVarint.call(this)[fn](true);
-        },
-
-        sint64: function read_sint64() {
-            return readLongVarint.call(this).zzDecode()[fn](false);
-        },
-
-        fixed64: function read_fixed64() {
-            return readFixed64.call(this)[fn](true);
-        },
-
-        sfixed64: function read_sfixed64() {
-            return readFixed64.call(this)[fn](false);
-        }
-
-    });
-};
-
-
-/***/ }),
-/* 17 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = OneOf;
-
-// extends ReflectionObject
-var ReflectionObject = __webpack_require__(4);
-((OneOf.prototype = Object.create(ReflectionObject.prototype)).constructor = OneOf).className = "OneOf";
-
-var Field = __webpack_require__(5),
-    util  = __webpack_require__(0);
-
-/**
- * Constructs a new oneof instance.
- * @classdesc Reflected oneof.
- * @extends ReflectionObject
- * @constructor
- * @param {string} name Oneof name
- * @param {string[]|Object.<string,*>} [fieldNames] Field names
- * @param {Object.<string,*>} [options] Declared options
- * @param {string} [comment] Comment associated with this field
- */
-function OneOf(name, fieldNames, options, comment) {
-    if (!Array.isArray(fieldNames)) {
-        options = fieldNames;
-        fieldNames = undefined;
-    }
-    ReflectionObject.call(this, name, options);
-
-    /* istanbul ignore if */
-    if (!(fieldNames === undefined || Array.isArray(fieldNames)))
-        throw TypeError("fieldNames must be an Array");
-
-    /**
-     * Field names that belong to this oneof.
-     * @type {string[]}
-     */
-    this.oneof = fieldNames || []; // toJSON, marker
-
-    /**
-     * Fields that belong to this oneof as an array for iteration.
-     * @type {Field[]}
-     * @readonly
-     */
-    this.fieldsArray = []; // declared readonly for conformance, possibly not yet added to parent
-
-    /**
-     * Comment for this field.
-     * @type {string|null}
-     */
-    this.comment = comment;
-}
-
-/**
- * Oneof descriptor.
- * @interface IOneOf
- * @property {Array.<string>} oneof Oneof field names
- * @property {Object.<string,*>} [options] Oneof options
- */
-
-/**
- * Constructs a oneof from a oneof descriptor.
- * @param {string} name Oneof name
- * @param {IOneOf} json Oneof descriptor
- * @returns {OneOf} Created oneof
- * @throws {TypeError} If arguments are invalid
- */
-OneOf.fromJSON = function fromJSON(name, json) {
-    return new OneOf(name, json.oneof, json.options, json.comment);
-};
-
-/**
- * Converts this oneof to a oneof descriptor.
- * @param {IToJSONOptions} [toJSONOptions] JSON conversion options
- * @returns {IOneOf} Oneof descriptor
- */
-OneOf.prototype.toJSON = function toJSON(toJSONOptions) {
-    var keepComments = toJSONOptions ? Boolean(toJSONOptions.keepComments) : false;
-    return util.toObject([
-        "options" , this.options,
-        "oneof"   , this.oneof,
-        "comment" , keepComments ? this.comment : undefined
-    ]);
-};
-
-/**
- * Adds the fields of the specified oneof to the parent if not already done so.
- * @param {OneOf} oneof The oneof
- * @returns {undefined}
- * @inner
- * @ignore
- */
-function addFieldsToParent(oneof) {
-    if (oneof.parent)
-        for (var i = 0; i < oneof.fieldsArray.length; ++i)
-            if (!oneof.fieldsArray[i].parent)
-                oneof.parent.add(oneof.fieldsArray[i]);
-}
-
-/**
- * Adds a field to this oneof and removes it from its current parent, if any.
- * @param {Field} field Field to add
- * @returns {OneOf} `this`
- */
-OneOf.prototype.add = function add(field) {
-
-    /* istanbul ignore if */
-    if (!(field instanceof Field))
-        throw TypeError("field must be a Field");
-
-    if (field.parent && field.parent !== this.parent)
-        field.parent.remove(field);
-    this.oneof.push(field.name);
-    this.fieldsArray.push(field);
-    field.partOf = this; // field.parent remains null
-    addFieldsToParent(this);
-    return this;
-};
-
-/**
- * Removes a field from this oneof and puts it back to the oneof's parent.
- * @param {Field} field Field to remove
- * @returns {OneOf} `this`
- */
-OneOf.prototype.remove = function remove(field) {
-
-    /* istanbul ignore if */
-    if (!(field instanceof Field))
-        throw TypeError("field must be a Field");
-
-    var index = this.fieldsArray.indexOf(field);
-
-    /* istanbul ignore if */
-    if (index < 0)
-        throw Error(field + " is not a member of " + this);
-
-    this.fieldsArray.splice(index, 1);
-    index = this.oneof.indexOf(field.name);
-
-    /* istanbul ignore else */
-    if (index > -1) // theoretical
-        this.oneof.splice(index, 1);
-
-    field.partOf = null;
-    return this;
-};
-
-/**
- * @override
- */
-OneOf.prototype.onAdd = function onAdd(parent) {
-    ReflectionObject.prototype.onAdd.call(this, parent);
-    var self = this;
-    // Collect present fields
-    for (var i = 0; i < this.oneof.length; ++i) {
-        var field = parent.get(this.oneof[i]);
-        if (field && !field.partOf) {
-            field.partOf = self;
-            self.fieldsArray.push(field);
-        }
-    }
-    // Add not yet present fields
-    addFieldsToParent(this);
-};
-
-/**
- * @override
- */
-OneOf.prototype.onRemove = function onRemove(parent) {
-    for (var i = 0, field; i < this.fieldsArray.length; ++i)
-        if ((field = this.fieldsArray[i]).parent)
-            field.parent.remove(field);
-    ReflectionObject.prototype.onRemove.call(this, parent);
-};
-
-/**
- * Decorator function as returned by {@link OneOf.d} (TypeScript).
- * @typedef OneOfDecorator
- * @type {function}
- * @param {Object} prototype Target prototype
- * @param {string} oneofName OneOf name
- * @returns {undefined}
- */
-
-/**
- * OneOf decorator (TypeScript).
- * @function
- * @param {...string} fieldNames Field names
- * @returns {OneOfDecorator} Decorator function
- * @template T extends string
- */
-OneOf.d = function decorateOneOf() {
-    var fieldNames = new Array(arguments.length),
-        index = 0;
-    while (index < arguments.length)
-        fieldNames[index] = arguments[index++];
-    return function oneOfDecorator(prototype, oneofName) {
-        util.decorateType(prototype.constructor)
-            .add(new OneOf(oneofName, fieldNames));
-        Object.defineProperty(prototype, oneofName, {
-            get: util.oneOfGetter(fieldNames),
-            set: util.oneOfSetter(fieldNames)
-        });
-    };
-};
-
-
-/***/ }),
-/* 18 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-module.exports = Message;
-
-var util = __webpack_require__(2);
-
-/**
- * Constructs a new message instance.
- * @classdesc Abstract runtime message.
- * @constructor
- * @param {Properties<T>} [properties] Properties to set
- * @template T extends object
- */
-function Message(properties) {
-    // not used internally
-    if (properties)
-        for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-            this[keys[i]] = properties[keys[i]];
-}
-
-/**
- * Reference to the reflected type.
- * @name Message.$type
- * @type {Type}
- * @readonly
- */
-
-/**
- * Reference to the reflected type.
- * @name Message#$type
- * @type {Type}
- * @readonly
- */
-
-/*eslint-disable valid-jsdoc*/
-
-/**
- * Creates a new message of this type using the specified properties.
- * @param {Object.<string,*>} [properties] Properties to set
- * @returns {Message<T>} Message instance
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.create = function create(properties) {
-    return this.$type.create(properties);
-};
-
-/**
- * Encodes a message of this type.
- * @param {T|Object.<string,*>} message Message to encode
- * @param {Writer} [writer] Writer to use
- * @returns {Writer} Writer
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.encode = function encode(message, writer) {
-    return this.$type.encode(message, writer);
-};
-
-/**
- * Encodes a message of this type preceeded by its length as a varint.
- * @param {T|Object.<string,*>} message Message to encode
- * @param {Writer} [writer] Writer to use
- * @returns {Writer} Writer
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.encodeDelimited = function encodeDelimited(message, writer) {
-    return this.$type.encodeDelimited(message, writer);
-};
-
-/**
- * Decodes a message of this type.
- * @name Message.decode
- * @function
- * @param {Reader|Uint8Array} reader Reader or buffer to decode
- * @returns {T} Decoded message
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.decode = function decode(reader) {
-    return this.$type.decode(reader);
-};
-
-/**
- * Decodes a message of this type preceeded by its length as a varint.
- * @name Message.decodeDelimited
- * @function
- * @param {Reader|Uint8Array} reader Reader or buffer to decode
- * @returns {T} Decoded message
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.decodeDelimited = function decodeDelimited(reader) {
-    return this.$type.decodeDelimited(reader);
-};
-
-/**
- * Verifies a message of this type.
- * @name Message.verify
- * @function
- * @param {Object.<string,*>} message Plain object to verify
- * @returns {string|null} `null` if valid, otherwise the reason why it is not
- */
-Message.verify = function verify(message) {
-    return this.$type.verify(message);
-};
-
-/**
- * Creates a new message of this type from a plain object. Also converts values to their respective internal types.
- * @param {Object.<string,*>} object Plain object
- * @returns {T} Message instance
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.fromObject = function fromObject(object) {
-    return this.$type.fromObject(object);
-};
-
-/**
- * Creates a plain object from a message of this type. Also converts values to other types if specified.
- * @param {T} message Message instance
- * @param {IConversionOptions} [options] Conversion options
- * @returns {Object.<string,*>} Plain object
- * @template T extends Message<T>
- * @this Constructor<T>
- */
-Message.toObject = function toObject(message, options) {
-    return this.$type.toObject(message, options);
-};
-
-/**
- * Converts this message to JSON.
- * @returns {Object.<string,*>} JSON object
- */
-Message.prototype.toJSON = function toJSON() {
-    return this.$type.toObject(this, util.toJSONOptions);
-};
-
-/*eslint-enable valid-jsdoc*/
-
-/***/ }),
 /* 19 */
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -6881,7 +6881,7 @@ var rpc = exports;
  * @returns {undefined}
  */
 
-rpc.Service = __webpack_require__(47);
+rpc.Service = __webpack_require__(45);
 
 
 /***/ }),
@@ -6918,7 +6918,7 @@ module.exports = {};
 module.exports = encoder;
 
 var Enum     = __webpack_require__(1),
-    types    = __webpack_require__(10),
+    types    = __webpack_require__(7),
     util     = __webpack_require__(0);
 
 /**
@@ -7024,17 +7024,17 @@ function encoder(mtype) {
 module.exports = Type;
 
 // extends Namespace
-var Namespace = __webpack_require__(9);
+var Namespace = __webpack_require__(6);
 ((Type.prototype = Object.create(Namespace.prototype)).constructor = Type).className = "Type";
 
 var Enum      = __webpack_require__(1),
-    OneOf     = __webpack_require__(17),
+    OneOf     = __webpack_require__(13),
     Field     = __webpack_require__(5),
     MapField  = __webpack_require__(25),
     Service   = __webpack_require__(26),
-    Message   = __webpack_require__(18),
-    Reader    = __webpack_require__(16),
-    Writer    = __webpack_require__(15),
+    Message   = __webpack_require__(14),
+    Reader    = __webpack_require__(12),
+    Writer    = __webpack_require__(11),
     util      = __webpack_require__(0),
     encoder   = __webpack_require__(23),
     decoder   = __webpack_require__(28),
@@ -7623,7 +7623,7 @@ module.exports = MapField;
 var Field = __webpack_require__(5);
 ((MapField.prototype = Object.create(Field.prototype)).constructor = MapField).className = "MapField";
 
-var types   = __webpack_require__(10),
+var types   = __webpack_require__(7),
     util    = __webpack_require__(0);
 
 /**
@@ -7753,7 +7753,7 @@ MapField.d = function decorateMapField(fieldId, fieldKeyType, fieldValueType) {
 module.exports = Service;
 
 // extends Namespace
-var Namespace = __webpack_require__(9);
+var Namespace = __webpack_require__(6);
 ((Service.prototype = Object.create(Namespace.prototype)).constructor = Service).className = "Service";
 
 var Method = __webpack_require__(27),
@@ -8085,7 +8085,7 @@ Method.prototype.resolve = function resolve() {
 module.exports = decoder;
 
 var Enum    = __webpack_require__(1),
-    types   = __webpack_require__(10),
+    types   = __webpack_require__(7),
     util    = __webpack_require__(0);
 
 function missing(field) {
@@ -8680,7 +8680,7 @@ converter.toObject = function toObject(mtype) {
  */
 var wrappers = exports;
 
-var Message = __webpack_require__(18);
+var Message = __webpack_require__(14);
 
 /**
  * From object converter part of an {@link IWrapper}.
@@ -8765,12 +8765,12 @@ wrappers[".google.protobuf.Any"] = {
 module.exports = Root;
 
 // extends Namespace
-var Namespace = __webpack_require__(9);
+var Namespace = __webpack_require__(6);
 ((Root.prototype = Object.create(Namespace.prototype)).constructor = Root).className = "Root";
 
 var Field   = __webpack_require__(5),
     Enum    = __webpack_require__(1),
-    OneOf   = __webpack_require__(17),
+    OneOf   = __webpack_require__(13),
     util    = __webpack_require__(0);
 
 var Type,   // cyclic
@@ -9114,8 +9114,7 @@ Root._configure = function(Type_, parse_, common_) {
 
 
 /***/ }),
-/* 33 */,
-/* 34 */
+/* 33 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9124,73 +9123,24 @@ Root._configure = function(Type_, parse_, common_) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.CentrifugeProtobuf = exports.ProtobufDecoder = exports.JsonDecoder = exports.ProtobufEncoder = exports.JsonEncoder = exports.messageTypeProtobuf = exports.methodTypeProtobuf = undefined;
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-var _centrifuge = __webpack_require__(12);
-
-var _protobuf = __webpack_require__(35);
-
-var _json = __webpack_require__(11);
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+var _centrifuge = __webpack_require__(15);
 
 function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
 
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
-var CentrifugeProtobuf = function (_Centrifuge) {
-  _inherits(CentrifugeProtobuf, _Centrifuge);
-
-  function CentrifugeProtobuf() {
-    _classCallCheck(this, CentrifugeProtobuf);
-
-    return _possibleConstructorReturn(this, (CentrifugeProtobuf.__proto__ || Object.getPrototypeOf(CentrifugeProtobuf)).apply(this, arguments));
-  }
-
-  _createClass(CentrifugeProtobuf, [{
-    key: '_setFormat',
-    value: function _setFormat(format) {
-      if (format === 'protobuf') {
-        this._binary = true;
-        this._methodType = _protobuf.methodType;
-        this._messageType = _protobuf.messageType;
-        this._encoder = new _protobuf.ProtobufEncoder();
-        this._decoder = new _protobuf.ProtobufDecoder();
-      } else {
-        this._encoder = new _json.JsonEncoder();
-        this._decoder = new _json.JsonDecoder();
-      }
-    }
-  }]);
-
-  return CentrifugeProtobuf;
-}(_centrifuge.Centrifuge);
-
-exports.default = CentrifugeProtobuf;
-module.exports = exports['default'];
-
-/***/ }),
-/* 35 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var protobuf = __webpack_require__(36);
-var proto = protobuf.Root.fromJSON(__webpack_require__(51));
+var protobuf = __webpack_require__(34);
+var proto = protobuf.Root.fromJSON(__webpack_require__(49));
 
 var methodValues = proto.lookupEnum('MethodType').values;
 
-var methodType = exports.methodType = {
+var methodTypeProtobuf = exports.methodTypeProtobuf = {
   CONNECT: methodValues.CONNECT,
   REFRESH: methodValues.REFRESH,
   SUBSCRIBE: methodValues.SUBSCRIBE,
@@ -9218,7 +9168,7 @@ var methodSchema = {
   MESSAGE: [proto.lookupType('proto.MessageRequest'), null]
 };
 
-var messageType = exports.messageType = {
+var messageTypeProtobuf = exports.messageTypeProtobuf = {
   PUBLICATION: proto.lookupEnum('MessageType').values.PUBLICATION,
   JOIN: proto.lookupEnum('MessageType').values.JOIN,
   LEAVE: proto.lookupEnum('MessageType').values.LEAVE,
@@ -9272,37 +9222,37 @@ var ProtobufEncoder = exports.ProtobufEncoder = function () {
           if (command.params) {
             var type = void 0;
             switch (command.method) {
-              case methodType.CONNECT:
+              case methodTypeProtobuf.CONNECT:
                 type = methodSchema.CONNECT[0];
                 break;
-              case methodType.REFRESH:
+              case methodTypeProtobuf.REFRESH:
                 type = methodSchema.REFRESH;
                 break;
-              case methodType.SUBSCRIBE:
+              case methodTypeProtobuf.SUBSCRIBE:
                 type = methodSchema.SUBSCRIBE[0];
                 break;
-              case methodType.UNSUBSCRIBE:
+              case methodTypeProtobuf.UNSUBSCRIBE:
                 type = methodSchema.UNSUBSCRIBE[0];
                 break;
-              case methodType.PUBLISH:
+              case methodTypeProtobuf.PUBLISH:
                 type = methodSchema.PUBLISH[0];
                 break;
-              case methodType.PRESENCE:
+              case methodTypeProtobuf.PRESENCE:
                 type = methodSchema.PRESENCE[0];
                 break;
-              case methodType.PRESENCE_STATS:
+              case methodTypeProtobuf.PRESENCE_STATS:
                 type = methodSchema.PRESENCE_STATS[0];
                 break;
-              case methodType.HISTORY:
+              case methodTypeProtobuf.HISTORY:
                 type = methodSchema.HISTORY[0];
                 break;
-              case methodType.PING:
+              case methodTypeProtobuf.PING:
                 type = methodSchema.PING[0];
                 break;
-              case methodType.RPC:
+              case methodTypeProtobuf.RPC:
                 type = methodSchema.RPC[0];
                 break;
-              case methodType.Message:
+              case methodTypeProtobuf.Message:
                 type = methodSchema.MESSAGE[0];
                 break;
             }
@@ -9380,34 +9330,34 @@ var ProtobufDecoder = exports.ProtobufDecoder = function () {
     value: function decodeCommandResult(methodType, data) {
       var type;
       switch (methodType) {
-        case methodType.CONNECT:
+        case methodTypeProtobuf.CONNECT:
           type = methodSchema.CONNECT[1];
           break;
-        case methodType.REFRESH:
+        case methodTypeProtobuf.REFRESH:
           type = methodSchema.REFRESH[1];
           break;
-        case methodType.SUBSCRIBE:
+        case methodTypeProtobuf.SUBSCRIBE:
           type = methodSchema.SUBSCRIBE[1];
           break;
-        case methodType.UNSUBSCRIBE:
+        case methodTypeProtobuf.UNSUBSCRIBE:
           type = methodSchema.UNSUBSCRIBE[1];
           break;
-        case methodType.PUBLISH:
+        case methodTypeProtobuf.PUBLISH:
           type = methodSchema.PUBLISH[1];
           break;
-        case methodType.PRESENCE:
+        case methodTypeProtobuf.PRESENCE:
           type = methodSchema.PRESENCE[1];
           break;
-        case methodType.PRESENCE_STATS:
+        case methodTypeProtobuf.PRESENCE_STATS:
           type = methodSchema.PRESENCE_STATS[1];
           break;
-        case methodType.HISTORY:
+        case methodTypeProtobuf.HISTORY:
           type = methodSchema.HISTORY[1];
           break;
-        case methodType.PING:
+        case methodTypeProtobuf.PING:
           type = methodSchema.PING[1];
           break;
-        case methodType.RPC:
+        case methodTypeProtobuf.RPC:
           type = methodSchema.RPC[1];
           break;
       }
@@ -9423,16 +9373,16 @@ var ProtobufDecoder = exports.ProtobufDecoder = function () {
     value: function decodeMessageData(messageType, data) {
       var type;
       switch (messageType) {
-        case messageType.PUBLICATION:
+        case messageTypeProtobuf.PUBLICATION:
           type = MessageSchema.PUBLICATION;
           break;
-        case messageType.JOIN:
+        case messageTypeProtobuf.JOIN:
           type = MessageSchema.JOIN;
           break;
-        case messageType.LEAVE:
+        case messageTypeProtobuf.LEAVE:
           type = MessageSchema.LEAVE;
           break;
-        case messageType.UNSUB:
+        case messageTypeProtobuf.UNSUB:
           type = MessageSchema.UNSUB;
           break;
       }
@@ -9454,23 +9404,51 @@ var ProtobufDecoder = exports.ProtobufDecoder = function () {
   return ProtobufDecoder;
 }();
 
+var CentrifugeProtobuf = exports.CentrifugeProtobuf = function (_Centrifuge) {
+  _inherits(CentrifugeProtobuf, _Centrifuge);
+
+  function CentrifugeProtobuf() {
+    _classCallCheck(this, CentrifugeProtobuf);
+
+    return _possibleConstructorReturn(this, (CentrifugeProtobuf.__proto__ || Object.getPrototypeOf(CentrifugeProtobuf)).apply(this, arguments));
+  }
+
+  _createClass(CentrifugeProtobuf, [{
+    key: '_setFormat',
+    value: function _setFormat(format) {
+      if (format === 'protobuf') {
+        this._binary = true;
+        this._methodType = methodTypeProtobuf;
+        this._messageType = messageTypeProtobuf;
+        this._encoder = new ProtobufEncoder();
+        this._decoder = new ProtobufDecoder();
+      } else {
+        this._encoder = new JsonEncoder();
+        this._decoder = new JsonDecoder();
+      }
+    }
+  }]);
+
+  return CentrifugeProtobuf;
+}(_centrifuge.Centrifuge);
+
 /***/ }),
-/* 36 */
+/* 34 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 // light library entry point.
 
 
-module.exports = __webpack_require__(37);
+module.exports = __webpack_require__(35);
 
 /***/ }),
-/* 37 */
+/* 35 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var protobuf = module.exports = __webpack_require__(38);
+var protobuf = module.exports = __webpack_require__(36);
 
 protobuf.build = "light";
 
@@ -9550,22 +9528,22 @@ protobuf.converter        = __webpack_require__(30);
 
 // Reflection
 protobuf.ReflectionObject = __webpack_require__(4);
-protobuf.Namespace        = __webpack_require__(9);
+protobuf.Namespace        = __webpack_require__(6);
 protobuf.Root             = __webpack_require__(32);
 protobuf.Enum             = __webpack_require__(1);
 protobuf.Type             = __webpack_require__(24);
 protobuf.Field            = __webpack_require__(5);
-protobuf.OneOf            = __webpack_require__(17);
+protobuf.OneOf            = __webpack_require__(13);
 protobuf.MapField         = __webpack_require__(25);
 protobuf.Service          = __webpack_require__(26);
 protobuf.Method           = __webpack_require__(27);
 
 // Runtime
-protobuf.Message          = __webpack_require__(18);
+protobuf.Message          = __webpack_require__(14);
 protobuf.wrappers         = __webpack_require__(31);
 
 // Utility
-protobuf.types            = __webpack_require__(10);
+protobuf.types            = __webpack_require__(7);
 protobuf.util             = __webpack_require__(0);
 
 // Configure reflection
@@ -9576,7 +9554,7 @@ protobuf.Field._configure(protobuf.Type);
 
 
 /***/ }),
-/* 38 */
+/* 36 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9592,10 +9570,10 @@ var protobuf = exports;
 protobuf.build = "minimal";
 
 // Serialization
-protobuf.Writer       = __webpack_require__(15);
-protobuf.BufferWriter = __webpack_require__(45);
-protobuf.Reader       = __webpack_require__(16);
-protobuf.BufferReader = __webpack_require__(46);
+protobuf.Writer       = __webpack_require__(11);
+protobuf.BufferWriter = __webpack_require__(43);
+protobuf.Reader       = __webpack_require__(12);
+protobuf.BufferReader = __webpack_require__(44);
 
 // Utility
 protobuf.util         = __webpack_require__(2);
@@ -9619,7 +9597,7 @@ configure();
 
 
 /***/ }),
-/* 39 */
+/* 37 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9765,7 +9743,7 @@ base64.test = function test(string) {
 
 
 /***/ }),
-/* 40 */
+/* 38 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9848,7 +9826,7 @@ EventEmitter.prototype.emit = function emit(evt) {
 
 
 /***/ }),
-/* 41 */
+/* 39 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10190,7 +10168,7 @@ function readUintBE(buf, pos) {
 
 
 /***/ }),
-/* 42 */
+/* 40 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10302,7 +10280,7 @@ utf8.write = function utf8_write(string, buffer, offset) {
 
 
 /***/ }),
-/* 43 */
+/* 41 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10357,7 +10335,7 @@ function pool(alloc, slice, size) {
 
 
 /***/ }),
-/* 44 */
+/* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10564,7 +10542,7 @@ LongBits.prototype.length = function length() {
 
 
 /***/ }),
-/* 45 */
+/* 43 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10572,7 +10550,7 @@ LongBits.prototype.length = function length() {
 module.exports = BufferWriter;
 
 // extends Writer
-var Writer = __webpack_require__(15);
+var Writer = __webpack_require__(11);
 (BufferWriter.prototype = Object.create(Writer.prototype)).constructor = BufferWriter;
 
 var util = __webpack_require__(2);
@@ -10652,7 +10630,7 @@ BufferWriter.prototype.string = function write_string_buffer(value) {
 
 
 /***/ }),
-/* 46 */
+/* 44 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10660,7 +10638,7 @@ BufferWriter.prototype.string = function write_string_buffer(value) {
 module.exports = BufferReader;
 
 // extends Reader
-var Reader = __webpack_require__(16);
+var Reader = __webpack_require__(12);
 (BufferReader.prototype = Object.create(Reader.prototype)).constructor = BufferReader;
 
 var util = __webpack_require__(2);
@@ -10703,7 +10681,7 @@ BufferReader.prototype.string = function read_string_buffer() {
 
 
 /***/ }),
-/* 47 */
+/* 45 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10852,7 +10830,7 @@ Service.prototype.end = function end(endedByRPC) {
 
 
 /***/ }),
-/* 48 */
+/* 46 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10958,7 +10936,7 @@ codegen.verbose = false;
 
 
 /***/ }),
-/* 49 */
+/* 47 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11080,7 +11058,7 @@ fetch.xhr = function fetch_xhr(filename, options, callback) {
 
 
 /***/ }),
-/* 50 */
+/* 48 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11152,10 +11130,28 @@ path.resolve = function resolve(originPath, includePath, alreadyNormalized) {
 
 
 /***/ }),
-/* 51 */
+/* 49 */
 /***/ (function(module, exports) {
 
 module.exports = {"nested":{"proto":{"nested":{"Error":{"fields":{"code":{"type":"uint32","id":1},"message":{"type":"string","id":2}}},"MethodType":{"values":{"CONNECT":0,"REFRESH":1,"SUBSCRIBE":2,"UNSUBSCRIBE":3,"PUBLISH":4,"PRESENCE":5,"PRESENCE_STATS":6,"HISTORY":7,"PING":8,"RPC":9,"MESSAGE":10}},"Command":{"fields":{"id":{"type":"uint32","id":1},"method":{"type":"MethodType","id":2},"params":{"type":"bytes","id":3}}},"Reply":{"fields":{"id":{"type":"uint32","id":1},"error":{"type":"Error","id":2},"result":{"type":"bytes","id":3}}},"MessageType":{"values":{"PUBLICATION":0,"JOIN":1,"LEAVE":2,"UNSUB":3}},"Message":{"fields":{"type":{"type":"MessageType","id":1},"channel":{"type":"string","id":2},"data":{"type":"bytes","id":3}}},"ClientInfo":{"fields":{"user":{"type":"string","id":1},"client":{"type":"string","id":2},"connInfo":{"type":"bytes","id":3},"chanInfo":{"type":"bytes","id":4}}},"Publication":{"fields":{"uid":{"type":"string","id":1},"data":{"type":"bytes","id":2},"info":{"type":"ClientInfo","id":3}}},"Join":{"fields":{"info":{"type":"ClientInfo","id":1}}},"Leave":{"fields":{"info":{"type":"ClientInfo","id":1}}},"Unsub":{"fields":{}},"ConnectRequest":{"fields":{"user":{"type":"string","id":1},"exp":{"type":"string","id":2},"info":{"type":"string","id":3},"opts":{"type":"string","id":4},"sign":{"type":"string","id":5}}},"ConnectResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"ConnectResult","id":2}}},"ConnectResult":{"fields":{"client":{"type":"string","id":1},"version":{"type":"string","id":2},"expires":{"type":"bool","id":3},"expired":{"type":"bool","id":4},"ttl":{"type":"uint32","id":5}}},"RefreshRequest":{"fields":{"user":{"type":"string","id":1},"exp":{"type":"string","id":2},"info":{"type":"string","id":3},"opts":{"type":"string","id":4},"sign":{"type":"string","id":5}}},"RefreshResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"RefreshResult","id":2}}},"RefreshResult":{"fields":{"client":{"type":"string","id":1},"version":{"type":"string","id":2},"expires":{"type":"bool","id":3},"expired":{"type":"bool","id":4},"ttl":{"type":"uint32","id":5}}},"SubscribeRequest":{"fields":{"channel":{"type":"string","id":1},"client":{"type":"string","id":2},"info":{"type":"string","id":3},"sign":{"type":"string","id":4},"recover":{"type":"bool","id":5},"last":{"type":"string","id":6}}},"SubscribeResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"SubscribeResult","id":2}}},"SubscribeResult":{"fields":{"last":{"type":"string","id":1},"recovered":{"type":"bool","id":2},"publications":{"rule":"repeated","type":"Publication","id":3}}},"UnsubscribeRequest":{"fields":{"channel":{"type":"string","id":1}}},"UnsubscribeResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"UnsubscribeResult","id":2}}},"UnsubscribeResult":{"fields":{}},"PublishRequest":{"fields":{"channel":{"type":"string","id":1},"data":{"type":"bytes","id":2}}},"PublishResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"PublishResult","id":2}}},"PublishResult":{"fields":{}},"PresenceRequest":{"fields":{"channel":{"type":"string","id":1}}},"PresenceResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"PresenceResult","id":2}}},"PresenceResult":{"fields":{"presence":{"keyType":"string","type":"ClientInfo","id":1}}},"PresenceStatsRequest":{"fields":{"channel":{"type":"string","id":1}}},"PresenceStatsResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"PresenceStatsResult","id":2}}},"PresenceStatsResult":{"fields":{"numClients":{"type":"uint32","id":1},"numUsers":{"type":"uint32","id":2}}},"HistoryRequest":{"fields":{"channel":{"type":"string","id":1}}},"HistoryResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"HistoryResult","id":2}}},"HistoryResult":{"fields":{"publications":{"rule":"repeated","type":"Publication","id":1}}},"PingRequest":{"fields":{"data":{"type":"string","id":1}}},"PingResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"PingResult","id":2}}},"PingResult":{"fields":{"data":{"type":"string","id":1}}},"RPCRequest":{"fields":{"data":{"type":"bytes","id":1}}},"RPCResponse":{"fields":{"error":{"type":"Error","id":1},"result":{"type":"RPCResult","id":2}}},"RPCResult":{"fields":{"data":{"type":"bytes","id":1}}},"MessageRequest":{"fields":{"data":{"type":"bytes","id":1}}},"Centrifuge":{"methods":{"Communicate":{"requestType":"Command","requestStream":true,"responseType":"Reply","responseStream":true}}}}}}}
+
+/***/ }),
+/* 50 */,
+/* 51 */,
+/* 52 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _protobuf = __webpack_require__(33);
+
+exports.default = _protobuf.CentrifugeProtobuf;
+module.exports = exports['default'];
 
 /***/ })
 /******/ ]);

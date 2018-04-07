@@ -1,9 +1,11 @@
+import {Centrifuge} from './centrifuge.js';
+
 const protobuf = require('protobufjs/light');
 const proto = protobuf.Root.fromJSON(require('./client.proto.json'));
 
 const methodValues = proto.lookupEnum('MethodType').values;
 
-export const methodType = {
+export const methodTypeProtobuf = {
   CONNECT: methodValues.CONNECT,
   REFRESH: methodValues.REFRESH,
   SUBSCRIBE: methodValues.SUBSCRIBE,
@@ -64,7 +66,7 @@ const methodSchema = {
   ]
 };
 
-export const messageType = {
+export const messageTypeProtobuf = {
   PUBLICATION: proto.lookupEnum('MessageType').values.PUBLICATION,
   JOIN: proto.lookupEnum('MessageType').values.JOIN,
   LEAVE: proto.lookupEnum('MessageType').values.LEAVE,
@@ -103,37 +105,37 @@ export class ProtobufEncoder {
         if (command.params) {
           let type;
           switch (command.method) {
-            case methodType.CONNECT:
+            case methodTypeProtobuf.CONNECT:
               type = methodSchema.CONNECT[0];
               break;
-            case methodType.REFRESH:
+            case methodTypeProtobuf.REFRESH:
               type = methodSchema.REFRESH;
               break;
-            case methodType.SUBSCRIBE:
+            case methodTypeProtobuf.SUBSCRIBE:
               type = methodSchema.SUBSCRIBE[0];
               break;
-            case methodType.UNSUBSCRIBE:
+            case methodTypeProtobuf.UNSUBSCRIBE:
               type = methodSchema.UNSUBSCRIBE[0];
               break;
-            case methodType.PUBLISH:
+            case methodTypeProtobuf.PUBLISH:
               type = methodSchema.PUBLISH[0];
               break;
-            case methodType.PRESENCE:
+            case methodTypeProtobuf.PRESENCE:
               type = methodSchema.PRESENCE[0];
               break;
-            case methodType.PRESENCE_STATS:
+            case methodTypeProtobuf.PRESENCE_STATS:
               type = methodSchema.PRESENCE_STATS[0];
               break;
-            case methodType.HISTORY:
+            case methodTypeProtobuf.HISTORY:
               type = methodSchema.HISTORY[0];
               break;
-            case methodType.PING:
+            case methodTypeProtobuf.PING:
               type = methodSchema.PING[0];
               break;
-            case methodType.RPC:
+            case methodTypeProtobuf.RPC:
               type = methodSchema.RPC[0];
               break;
-            case methodType.Message:
+            case methodTypeProtobuf.Message:
               type = methodSchema.MESSAGE[0];
               break;
           }
@@ -189,34 +191,34 @@ export class ProtobufDecoder {
   decodeCommandResult(methodType, data) {
     var type;
     switch (methodType) {
-      case methodType.CONNECT:
+      case methodTypeProtobuf.CONNECT:
         type = methodSchema.CONNECT[1];
         break;
-      case methodType.REFRESH:
+      case methodTypeProtobuf.REFRESH:
         type = methodSchema.REFRESH[1];
         break;
-      case methodType.SUBSCRIBE:
+      case methodTypeProtobuf.SUBSCRIBE:
         type = methodSchema.SUBSCRIBE[1];
         break;
-      case methodType.UNSUBSCRIBE:
+      case methodTypeProtobuf.UNSUBSCRIBE:
         type = methodSchema.UNSUBSCRIBE[1];
         break;
-      case methodType.PUBLISH:
+      case methodTypeProtobuf.PUBLISH:
         type = methodSchema.PUBLISH[1];
         break;
-      case methodType.PRESENCE:
+      case methodTypeProtobuf.PRESENCE:
         type = methodSchema.PRESENCE[1];
         break;
-      case methodType.PRESENCE_STATS:
+      case methodTypeProtobuf.PRESENCE_STATS:
         type = methodSchema.PRESENCE_STATS[1];
         break;
-      case methodType.HISTORY:
+      case methodTypeProtobuf.HISTORY:
         type = methodSchema.HISTORY[1];
         break;
-      case methodType.PING:
+      case methodTypeProtobuf.PING:
         type = methodSchema.PING[1];
         break;
-      case methodType.RPC:
+      case methodTypeProtobuf.RPC:
         type = methodSchema.RPC[1];
         break;
     }
@@ -230,16 +232,16 @@ export class ProtobufDecoder {
   decodeMessageData(messageType, data) {
     var type;
     switch (messageType) {
-      case messageType.PUBLICATION:
+      case messageTypeProtobuf.PUBLICATION:
         type = MessageSchema.PUBLICATION;
         break;
-      case messageType.JOIN:
+      case messageTypeProtobuf.JOIN:
         type = MessageSchema.JOIN;
         break;
-      case messageType.LEAVE:
+      case messageTypeProtobuf.LEAVE:
         type = MessageSchema.LEAVE;
         break;
-      case messageType.UNSUB:
+      case messageTypeProtobuf.UNSUB:
         type = MessageSchema.UNSUB;
         break;
     }
@@ -254,5 +256,21 @@ export class ProtobufDecoder {
       return null;
     }
     return res;
+  }
+}
+
+export class CentrifugeProtobuf extends Centrifuge {
+
+  _setFormat(format) {
+    if (format === 'protobuf') {
+      this._binary = true;
+      this._methodType = methodTypeProtobuf;
+      this._messageType = messageTypeProtobuf;
+      this._encoder = new ProtobufEncoder();
+      this._decoder = new ProtobufDecoder();
+    } else {
+      this._encoder = new JsonEncoder();
+      this._decoder = new JsonDecoder();
+    }
   }
 }

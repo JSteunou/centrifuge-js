@@ -1,4 +1,4 @@
-export const methodType = {
+export const methodTypeJSON = {
   CONNECT: 'connect',
   REFRESH: 'refresh',
   SUBSCRIBE: 'subscribe',
@@ -12,7 +12,7 @@ export const methodType = {
   MESSAGE: 'message'
 };
 
-export const messageType = {
+export const messageTypeJSON = {
   PUBLICATION: 0,
   JOIN: 1,
   LEAVE: 2,

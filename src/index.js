@@ -1,2 +1,5 @@
 import {Centrifuge} from './centrifuge.js';
-export default Centrifuge;
+import {CentrifugeProtobuf} from './protobuf.js';
+
+export {Centrifuge};
+export {CentrifugeProtobuf};

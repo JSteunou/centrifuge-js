@@ -5,8 +5,8 @@ const Subscription = require('./subscription');
 import {
   JsonEncoder,
   JsonDecoder,
-  methodType,
-  messageType
+  methodTypeJSON,
+  messageTypeJSON
 } from './json';
 
 import {
@@ -24,8 +24,8 @@ export class Centrifuge extends EventEmitter {
 
   constructor(url, options) {
     super();
-    this._methodType = methodType;
-    this._messageType = messageType;
+    this._methodType = methodTypeJSON;
+    this._messageType = messageTypeJSON;
     this._url = url;
     this._sockjs = null;
     this._isSockjs = false;
